@@ -370,28 +370,76 @@ textarea {
  */
 .flow-chart {
   --chart-line: var(--color-slate-400);
+  --chart-back: var(--cat-browser);
+  --chart-ask: #fff7e6;
+  --chart-ask-edge: #d9a441;
   background-color: var(--manual-desk);
 }
-.flow-chart-band-loop {
-  background-color: var(--manual-loop-bg);
+[data-theme="dark"] .flow-chart {
+  --chart-ask: #2a2414;
+  --chart-ask-edge: #8f7333;
 }
-.flow-chart-band-when {
-  border: 1px dashed var(--color-slate-300);
+/* A frame: what repeats is tinted, a group is a plain box with its name in a strip at the top. */
+.flow-chart-frame {
+  border: 1px solid var(--color-slate-300);
+  background: color-mix(in srgb, var(--color-sheet) 60%, transparent);
 }
-.flow-chart-band-group,
-.flow-chart-band-always,
-.flow-chart-band-together {
-  border: 1px solid var(--color-slate-200);
+.flow-chart-frame-head {
+  border-bottom: 1px solid var(--color-slate-200);
+  background: var(--color-slate-50);
 }
-/* A step: a box on the line. Work on nothing outside is a quieter one. */
+.flow-chart-frame-head:hover {
+  background: var(--color-slate-100);
+}
+.flow-chart-frame-icon {
+  color: var(--color-slate-500);
+}
+.flow-chart-frame-loop {
+  border-color: color-mix(in srgb, var(--chart-back) 45%, transparent);
+  background: var(--manual-loop-bg);
+}
+.flow-chart-frame-loop > .flow-chart-frame-head {
+  background: color-mix(in srgb, var(--chart-back) 12%, var(--color-sheet));
+  border-bottom-color: color-mix(in srgb, var(--chart-back) 25%, transparent);
+}
+.flow-chart-frame-loop .flow-chart-frame-icon {
+  color: var(--chart-back);
+}
+.flow-chart-frame-try {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-shu-500) 55%, transparent);
+}
+.flow-chart-frame-try .flow-chart-frame-icon {
+  color: var(--color-shu-500);
+}
+/* A step: a box on the line. A wait or a check the sheet gives no number is a quieter one. */
 .flow-chart-node {
   background: var(--color-sheet);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 0.06);
 }
 .flow-chart-node:hover {
-  border-color: var(--color-slate-400);
+  border-color: var(--color-slate-500);
 }
-.flow-chart-node-quiet {
+.flow-chart-node-minor {
+  background: var(--color-slate-50);
+  box-shadow: none;
   border-style: dashed;
+}
+/* A question: a box pointed at both ends. */
+.flow-chart-ask-shape {
+  fill: var(--chart-ask);
+  stroke: var(--chart-ask-edge);
+}
+.flow-chart-ask:hover .flow-chart-ask-shape {
+  stroke: var(--color-slate-500);
+}
+/* Where the flow starts and ends. */
+.flow-chart-terminal {
+  background: var(--color-ink);
+  color: var(--color-sheet);
+}
+.flow-chart-caught {
+  background: color-mix(in srgb, var(--color-shu-500) 10%, var(--color-sheet));
 }
 /* The row picked: the sheet's highlighter under its words. */
 .flow-chart-on {

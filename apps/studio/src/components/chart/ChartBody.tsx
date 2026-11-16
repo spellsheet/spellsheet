@@ -1,6 +1,8 @@
-// The flow as a chart to read (see flow/chart.ts for what it shows and why).
-// It is drawn on the sheet's paper (components/sheet/SheetView.tsx): a box for each step, in the column of
-// the app it works on, and an arrow from each box to the next.
+// The flow as a chart to look at (see flow/chart.ts for what it shows and why).
+// It is drawn on the sheet's paper (components/sheet/SheetView.tsx): a box for
+// each step with its app's icon, a pointed box for each question with the line
+// parting under it, frames round what repeats and what belongs together, and
+// arrows between them all.
 import type { Step } from "@spellsheet/schema";
 import {
   ArrowDownToLine,
@@ -10,63 +12,53 @@ import {
   Columns2,
   FileInput,
   FileOutput,
+  Flag,
   Globe,
   KeyRound,
   LogOut,
+  Maximize2,
+  Minus,
   MousePointerClick,
+  Play,
+  Plus,
   Repeat,
   RotateCw,
-  Split,
+  ShieldAlert,
   StepForward,
   Timer,
   TriangleAlert,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../../context";
 import type { RunState } from "../../store/run";
-import {
-  type Band,
-  type Defs,
-  FACT_H,
-  FACT_PAD,
-  FAIL_LANE,
-  layoutChart,
-  NEST,
-  type Row,
-  TILE_H,
-  TILE_W,
-} from "../../flow/chart";
+import { type Chart, type Defs, FACT_H, type Frame, HEAD_H, type Line, LINE_H, BOX_PAD, layoutChart, appOf, type Shape, type Words } from "../../flow/chart";
 import { chartWords, guardOutcome } from "../../lib/keywords";
 import { type Fact, systemFacts } from "../../lib/systemFacts";
-import { groupIcon } from "../../lib/nodeIcons";
-import { groupLabel } from "../../lib/palette";
+import { groupIcon, nodeIcon } from "../../lib/nodeIcons";
+import { groupLabel, groupOf } from "../../lib/palette";
 import { plain, sentence } from "../../lib/sentence";
 import { BREAK, CONTINUE, FAIL } from "../../lib/stepTypes";
 import { CATEGORY_COLOR } from "../CommandPalette";
 
 /** The paper's margin round the chart. */
 const PAD = 40;
-/** Between the paper's heading and the columns' names. */
-const HEAD_GAP = 20;
-/** A column's name over it. */
-const LANE_HEAD = 40;
-/** Between a column's name and its first row. */
-const TOP = 20;
-/** Between places side by side in one column, and between columns. */
-const COL_GAP = 36;
-/** A corner of the line where it changes column. */
-const TURN = 6;
-/** The arrow's head, and the room over a box the line comes down into it. */
-const HEAD = 5;
-const DROP = 13;
-/** Where the line leaves a row, and where it comes into one: a box's lower and upper edge, a bar's middle. */
-const leave = (row: Row) => (row.kind === "bar" ? row.h / 2 : row.h);
-const enter = (row: Row) => (row.kind === "bar" ? row.h / 2 : 0);
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 1.5;
+const ZOOM_KEY = "spellsheet.chartZoom";
 
 /** What a step is called on the chart: the name it was given, else what it does in a sentence. */
-const title = (step: Step, defs: Defs): string =>
-  (step.name ?? "").trim() || plain(sentence(step, defs.get(step.type)));
+const title = (step: Step, defs: Defs): string => (step.name ?? "").trim() || plain(sentence(step, defs.get(step.type)));
+
+/** What an if or a switch asks: its name as a question, else its condition. */
+function question(step: Step, defs: Defs): string {
+  const said = (step.name ?? "").trim().replace(/[？?]$/, "");
+  const p = (step.params ?? {}) as Record<string, unknown>;
+  const cond = String(p.condition ?? p.value ?? "").replace(/^\{\{\s*|\s*\}\}$/g, "");
+  const text = said || cond || plain(sentence(step, defs.get(step.type)));
+  return /[　-鿿]/.test(text) ? `${text}？` : `${text}?`;
+}
 
 const FACT_ICON: Record<Fact["kind"], LucideIcon> = {
   connect: Globe,
@@ -85,8 +77,7 @@ const FACT_ICON: Record<Fact["kind"], LucideIcon> = {
 function FactLine({ fact, numbers }: { fact: Fact; numbers?: ReadonlyMap<string, number> }) {
   const words = chartWords();
   const Icon = FACT_ICON[fact.kind];
-  const at = (ids: string[]) =>
-    [...new Set(ids.map((id) => numbers?.get(id)).filter((n): n is number => n !== undefined))].sort((a, b) => a - b).join("・");
+  const at = (ids: string[]) => [...new Set(ids.map((id) => numbers?.get(id)).filter((n): n is number => n !== undefined))].sort((a, b) => a - b).join("・");
   const value = ((): string => {
     switch (fact.kind) {
       case "connect":
@@ -123,17 +114,7 @@ function FactLine({ fact, numbers }: { fact: Fact; numbers?: ReadonlyMap<string,
   );
 }
 
-/** What an if asks: its name as a question, else its condition. */
-function question(step: Step, defs: Defs): string {
-  const said = (step.name ?? "").trim().replace(/[？?]$/, "");
-  const cond = String(
-    (step.params as Record<string, unknown> | undefined)?.condition ?? "",
-  ).replace(/^\{\{\s*|\s*\}\}$/g, "");
-  const text = said || cond || plain(sentence(step, defs.get(step.type)));
-  return /[　-鿿]/.test(text) ? `${text}？` : `${text}?`;
-}
-
-/** What a column's steps work on: the sites and files they name. */
+/** What a set of steps works on: the sites and files they name. */
 function targets(steps: Step[]): string[] {
   const found: string[] = [];
   for (const step of steps) {
@@ -141,13 +122,346 @@ function targets(steps: Step[]): string[] {
     const win = (p.target as Record<string, unknown> | undefined)?.window as Record<string, unknown> | undefined;
     for (const value of [p.url, p.path, win?.process]) {
       if (typeof value !== "string" || value.includes("{{")) continue;
-      const name = /^https?:\/\//.test(value)
-        ? value.replace(/^https?:\/\//, "").split("/")[0]!
-        : value.split(/[\\/]/).at(-1)!;
+      const name = /^https?:\/\//.test(value) ? value.replace(/^https?:\/\//, "").split("/")[0]! : value.split(/[\\/]/).at(-1)!;
       if (name && !found.includes(name)) found.push(name);
     }
   }
   return found;
+}
+
+/** Every step of the flow that runs, inner ones too. */
+function allSteps(list: Step[], into: Step[] = []): Step[] {
+  for (const step of list) {
+    if (step.disabled) continue;
+    into.push(step);
+    for (const inner of Object.values(step.blocks ?? {})) allSteps(inner, into);
+  }
+  return into;
+}
+
+const color = (group: string) => CATEGORY_COLOR[group] ?? CATEGORY_COLOR.other!;
+
+/** The arrow's head at the end of a line, pointing the way its last piece runs. */
+function headAt(points: [number, number][]): string {
+  const [x2, y2] = points.at(-1)!;
+  const [x1, y1] = points.at(-2)!;
+  const dx = Math.sign(x2 - x1);
+  const dy = Math.sign(y2 - y1);
+  const s = 5;
+  // Back along the line, and out to each side.
+  const bx = x2 - dx * (s + 1);
+  const by = y2 - dy * (s + 1);
+  return `M ${bx - dy * s} ${by + dx * s} L ${x2} ${y2} L ${bx + dy * s} ${by - dx * s}`;
+}
+
+/** A line through its points, its corners rounded. */
+function pathOf(points: [number, number][]): string {
+  const r = 6;
+  let d = `M ${points[0]![0]} ${points[0]![1]}`;
+  for (let i = 1; i < points.length; i++) {
+    const [x, y] = points[i]!;
+    const next = points[i + 1];
+    if (!next) {
+      d += ` L ${x} ${y}`;
+      break;
+    }
+    const [px, py] = points[i - 1]!;
+    const into = Math.min(r, Math.abs(x - px) / 2 + Math.abs(y - py) / 2);
+    const out = Math.min(r, Math.abs(next[0] - x) / 2 + Math.abs(next[1] - y) / 2);
+    const k = Math.min(into, out);
+    const ax = x - Math.sign(x - px) * k;
+    const ay = y - Math.sign(y - py) * k;
+    const bx = x + Math.sign(next[0] - x) * k;
+    const by = y + Math.sign(next[1] - y) * k;
+    d += ` L ${ax} ${ay} Q ${x} ${y} ${bx} ${by}`;
+  }
+  return d;
+}
+
+const TONE: Record<Line["tone"], { stroke: string; dash?: string; width: number }> = {
+  line: { stroke: "var(--chart-line)", width: 1.5 },
+  fail: { stroke: "var(--color-shu-500)", dash: "4 4", width: 1.5 },
+  back: { stroke: "var(--chart-back)", width: 1.75 },
+};
+
+/**
+ * The chart itself, as wide and as high as it is: what lies under a sheet's
+ * heading when the sheet is read as a chart.
+ * `numbers`: each step's number on the sheet, so a box here and a line there are found from one another.
+ * `run`: the run that is going, or the last one: how far it got is said on the boxes.
+ * `onOpen`: a box pressed is read on the sheet, where its settings open under its line.
+ */
+export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<string, number>; run?: RunState | null; onOpen?: () => void }) {
+  const flow = useStudio((s) => s.flow);
+  const stepTypes = useStudio((s) => s.stepTypes);
+  const selection = useStudio((s) => s.selection);
+  const goTo = useStudio((s) => s.goTo);
+  const defs: Defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
+  // What the system does at each step, said in its box.
+  const facts = useMemo(() => (flow ? systemFacts(flow, defs) : new Map<string, Fact[]>()), [flow, defs]);
+  const words = chartWords();
+  const chart: Chart = useMemo(() => {
+    const w: Words = {
+      title: (s) => title(s, defs),
+      question: (s) => question(s, defs),
+      frame: (s, kind) => `${frameName(s, kind, defs)}  ${frameNote(s, kind)}`,
+      stop: (s) => (s.type === FAIL ? title(s, defs) : guardOutcome(s)),
+      answer: (_s, block, child) => (child ? title(child, defs) : block === "then" ? words.yes : block === "else" ? words.no : words.other),
+      pill: (k) => (k === "start" ? words.start : k === "end" ? words.end : k === "caught" ? words.failed : words.together()),
+    };
+    return layoutChart(flow?.steps ?? [], defs, {
+      facts: (s) => facts.get(s.id ?? "")?.length ?? 0,
+      // A step on an app the sheet gives no number is a wait or a check said in place: quieter here too.
+      minor: (s) => !!numbers && !numbers.has(s.id ?? "") && !s.blocks && appOf(s, defs) !== null,
+      words: w,
+    });
+    // `words` follow the language, which does not change while the chart is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow, defs, facts, numbers]);
+
+  // How big the chart is drawn: fitted to the desk at first, then as the person sets it.
+  const box = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState<number | null>(() => {
+    try {
+      const saved = Number(localStorage.getItem(ZOOM_KEY));
+      return saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+  const [room, setRoom] = useState(0);
+  useLayoutEffect(() => {
+    const desk = box.current?.closest(".flow-chart");
+    if (!desk) return;
+    const see = () => setRoom(desk.clientWidth);
+    see();
+    const watch = new ResizeObserver(see);
+    watch.observe(desk);
+    return () => watch.disconnect();
+  }, []);
+  const width = chart.width + PAD * 2;
+  const height = chart.height + PAD * 2;
+  // The paper's own margins and the desk's round it.
+  const fitted = room > 0 ? Math.max(ZOOM_MIN, Math.min(1, (room - 40 - 80 - 4) / width)) : 1;
+  const scale = zoom ?? fitted;
+  const set = (z: number | null) => {
+    const next = z === null ? null : Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) * 20) / 20;
+    setZoom(next);
+    try {
+      if (next === null) localStorage.removeItem(ZOOM_KEY);
+      else localStorage.setItem(ZOOM_KEY, String(next));
+    } catch {
+      // Not remembered: it still works this time.
+    }
+  };
+  // Ctrl with the wheel zooms, as in Office.
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      set(scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  });
+
+  if (!flow) return null;
+  const picked = selection?.kind === "step" ? selection.stepId : null;
+  const select = (id: string | undefined) => {
+    if (!id) return;
+    goTo(id);
+    onOpen?.();
+  };
+
+  // The apps the flow works on, and what on them: a key over the chart.
+  const apps = new Map<string, Step[]>();
+  for (const step of allSteps(flow.steps ?? [])) {
+    const app = appOf(step, defs);
+    if (app) apps.set(app, [...(apps.get(app) ?? []), step]);
+  }
+
+  return (
+    <div ref={box} className="flow-chart-body px-10 pb-10">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 pb-3">
+        {[...apps].map(([app, steps]) => {
+          const Icon = groupIcon(app);
+          const names = targets(steps);
+          return (
+            <span key={app} className="flex min-w-0 items-center gap-2">
+              <Tile icon={Icon} group={app} />
+              <span className="text-[13px] font-semibold whitespace-nowrap text-ink">{groupLabel(app)}</span>
+              {names.length > 0 && (
+                <span className="max-w-[320px] truncate font-mono text-[11px] text-slate-500">
+                  {names.slice(0, 2).join(" · ")}
+                  {names.length > 2 ? ` ${words.more(names.length - 2)}` : ""}
+                </span>
+              )}
+            </span>
+          );
+        })}
+        <span className="ml-auto flex items-center rounded-[6px] border border-slate-200 bg-sheet text-[12px] text-slate-600">
+          <button
+            type="button"
+            title={words.zoomOut}
+            aria-label={words.zoomOut}
+            disabled={scale <= ZOOM_MIN}
+            onClick={() => set(scale / 1.15)}
+            className="flex size-7 items-center justify-center hover:text-ink disabled:opacity-40"
+          >
+            <Minus size={14} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+          <button type="button" title={words.actual} onClick={() => set(1)} className="w-12 border-x border-slate-200 py-1 text-center tabular-nums hover:text-ink">
+            {Math.round(scale * 100)}%
+          </button>
+          <button
+            type="button"
+            title={words.zoomIn}
+            aria-label={words.zoomIn}
+            disabled={scale >= ZOOM_MAX}
+            onClick={() => set(scale * 1.15)}
+            className="flex size-7 items-center justify-center hover:text-ink disabled:opacity-40"
+          >
+            <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+          <button type="button" title={words.fit} onClick={() => set(null)} className={`flex h-7 items-center gap-1 border-l border-slate-200 px-2 hover:text-ink ${zoom === null ? "text-ink" : ""}`}>
+            <Maximize2 size={13} strokeWidth={1.75} aria-hidden="true" />
+            {words.fit}
+          </button>
+        </span>
+      </div>
+
+      {/* Wider than the paper, the chart scrolls sideways under the paper's heading, which stays where it is. */}
+      <div className="mt-2 overflow-x-auto">
+        <div className="relative" style={{ width: width * scale, height: height * scale }}>
+          <div className="absolute top-0 left-0 origin-top-left" style={{ width, height, transform: `scale(${scale})` }}>
+            <div
+              className="absolute"
+              style={{
+                left: PAD,
+                top: PAD,
+                width: chart.width,
+                height: chart.height,
+              }}
+            >
+              {chart.frames.map((f, i) => (
+                <FrameView key={i} frame={f} defs={defs} picked={picked} onPick={select} />
+              ))}
+              <svg className="pointer-events-none absolute inset-0 overflow-visible" width={chart.width} height={chart.height} aria-hidden="true">
+                {chart.lines.map((l, i) => {
+                  const tone = TONE[l.tone];
+                  return (
+                    <g key={i} fill="none" stroke={tone.stroke} strokeWidth={tone.width} strokeLinecap="round" strokeLinejoin="round">
+                      <path d={pathOf(l.points)} strokeDasharray={tone.dash} />
+                      {l.head && <path d={headAt(l.points)} />}
+                    </g>
+                  );
+                })}
+                {chart.joins.map(([x, y], i) => (
+                  <circle key={i} cx={x} cy={y} r={3.5} fill="var(--chart-line)" />
+                ))}
+              </svg>
+              {chart.lines.map((l, i) =>
+                l.answer ? (
+                  <span
+                    key={i}
+                    style={{ left: l.answer.at[0], top: l.answer.at[1] }}
+                    className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-sheet px-2 text-[11.5px] leading-[18px] font-medium whitespace-nowrap ${l.tone === "fail" ? "border-shu-500/50 text-shu-600" : "border-slate-300 text-slate-600"}`}
+                  >
+                    {l.answer.text}
+                  </span>
+                ) : null,
+              )}
+              {chart.shapes.map((s, i) => (
+                <ShapeView
+                  key={i}
+                  shape={s}
+                  defs={defs}
+                  picked={picked}
+                  number={s.kind === "step" && numbers ? (numbers.get(s.step.id ?? "") ?? null) : undefined}
+                  facts={s.kind === "step" ? facts.get(s.step.id ?? "") : undefined}
+                  numbers={numbers}
+                  state={s.kind === "step" || s.kind === "ask" ? (s.step.id ? run?.steps[s.step.id] : undefined) : undefined}
+                  onPick={select}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A frame's name: the name it was given, else what it is. */
+function frameName(step: Step, kind: Frame["kind"], defs: Defs): string {
+  const words = chartWords();
+  if (kind === "always") return words.always;
+  const name = (step.name ?? "").trim();
+  if (kind === "try") return name || words.guarded;
+  return name || title(step, defs);
+}
+
+/** What is said beside a frame's name: how a loop goes round, how often a group is tried. */
+function frameNote(step: Step, kind: Frame["kind"]): string {
+  const words = chartWords();
+  if (kind === "loop") return words.loopNote(step);
+  const tries = kind === "group" ? step.retry?.maxAttempts : undefined;
+  return tries && tries > 1 ? words.tries(tries) : "";
+}
+
+/** An app's or a step's icon on a tint of its colour. */
+function Tile({ icon: Icon, group, size = 22 }: { icon: LucideIcon; group: string; size?: number }) {
+  const c = color(group);
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-[5px]"
+      style={{
+        width: size,
+        height: size,
+        color: c,
+        background: `color-mix(in srgb, ${c} 14%, transparent)`,
+      }}
+    >
+      <Icon size={Math.round(size * 0.6)} strokeWidth={1.9} aria-hidden={true} />
+    </span>
+  );
+}
+
+const FRAME_ICON: Record<Frame["kind"], LucideIcon> = {
+  loop: Repeat,
+  group: Layers,
+  try: ShieldAlert,
+  always: Flag,
+};
+
+function FrameView({ frame, defs, picked, onPick }: { frame: Frame; defs: Defs; picked: string | null; onPick: (id: string | undefined) => void }) {
+  const { kind, step } = frame;
+  const Icon = FRAME_ICON[kind];
+  const tries = kind === "group" ? step.retry?.maxAttempts : undefined;
+  const note = frameNote(step, kind);
+  const on = picked !== null && picked === step.id;
+  return (
+    <div className={`flow-chart-frame flow-chart-frame-${kind} absolute rounded-[10px]`} style={{ left: frame.x, top: frame.y, width: frame.w, height: frame.h }}>
+      <button
+        type="button"
+        title={plain(sentence(step, defs.get(step.type)))}
+        onClick={() => onPick(step.id)}
+        className="flow-chart-frame-head flex w-full items-center gap-2 rounded-t-[10px] px-3 text-left"
+        style={{ height: HEAD_H }}
+      >
+        <Icon size={14} strokeWidth={1.9} aria-hidden="true" className="flow-chart-frame-icon shrink-0" />
+        <span className={`truncate text-[12.5px] font-semibold text-ink ${on ? "flow-chart-on" : ""}`}>{frameName(step, kind, defs)}</span>
+        {note && (
+          <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-slate-500">
+            {tries && tries > 1 && <RotateCw size={11} strokeWidth={1.9} aria-hidden="true" />}
+            {note}
+          </span>
+        )}
+      </button>
+    </div>
+  );
 }
 
 const STOP_ICON: Record<string, LucideIcon> = {
@@ -155,374 +469,127 @@ const STOP_ICON: Record<string, LucideIcon> = {
   [BREAK]: LogOut,
   [FAIL]: CircleX,
 };
-const BAND_ICON: Partial<Record<Band["kind"], LucideIcon>> = {
-  loop: Repeat,
-  when: Split,
-  together: Columns2,
-};
 
-/**
- * The chart itself, as wide and as high as it is: what lies under a sheet's
- * heading when the sheet is read as a chart.
- */
-/**
- * `numbers`: each step's number on the sheet, so a row here and a line there are found from one another.
- * `run`: the run that is going, or the last one: how far it got is said on the rows.
- * `onOpen`: a row pressed is read on the sheet, where its settings open under its line.
- */
-export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<string, number>; run?: RunState | null; onOpen?: () => void }) {
-  const flow = useStudio((s) => s.flow);
-  const stepTypes = useStudio((s) => s.stepTypes);
-  const selection = useStudio((s) => s.selection);
-  const goTo = useStudio((s) => s.goTo);
-  const defs: Defs = useMemo(
-    () => new Map(stepTypes.map((d) => [d.type, d] as const)),
-    [stepTypes],
-  );
-  // What the system does at each step, said under its row.
-  const facts = useMemo(() => (flow ? systemFacts(flow, defs) : new Map<string, Fact[]>()), [flow, defs]);
-  const chart = useMemo(() => layoutChart(flow?.steps ?? [], defs, (step) => facts.get(step.id ?? "")?.length ?? 0), [flow, defs, facts]);
-  if (!flow) return null;
-  const words = chartWords();
-
-  // Columns: each as wide as the places side by side in it, and the bands round them.
-  const side = NEST * chart.nest;
-  const place = TILE_W;
-  const widths = chart.lanes.map(
-    (l) => 2 * side + l.cols * place + (l.cols - 1) * COL_GAP,
-  );
-  const lefts: number[] = [];
-  chart.lanes.forEach((_, i) =>
-    lefts.push(i === 0 ? PAD : lefts[i - 1]! + widths[i - 1]! + COL_GAP),
-  );
-  /** The line a row is on: down the middle of its box. */
-  const lineX = (r: { lane: number; off: number }) =>
-    lefts[r.lane]! + side + TILE_W / 2 + r.off * (place + COL_GAP);
-  const top = HEAD_GAP + LANE_HEAD + TOP;
-  const width = lefts.at(-1)! + widths.at(-1)! + PAD;
-  const height = top + chart.height + PAD;
-  const picked = selection?.kind === "step" ? selection.stepId : null;
-
-  const bandBox = (b: Band) => {
-    const inside = chart.rows.slice(b.first, b.end);
-    const xs = inside
-      .filter(
-        (r) => r.lane !== chart.failLane || inside[0]!.lane === chart.failLane,
-      )
-      .map(lineX);
-    const room = NEST * (b.inner + 1);
-    const left = Math.min(...xs) - TILE_W / 2 - room;
-    return {
-      left,
-      width: Math.max(...xs) + TILE_W / 2 + room - left,
-      top: top + b.top,
-      height: b.bottom - b.top,
-    };
-  };
-  /** A bar: over the lines it reaches and its own. */
-  const barBox = (row: Extract<Row, { kind: "bar" }>) => {
-    const xs = [lineX(row), ...row.over.map((i) => lineX(chart.rows[i]!))];
-    const left = Math.min(...xs) - 36;
-    return { left, width: Math.max(...xs) + 36 - left };
-  };
-  const path = ({ from, to }: { from: number; to: number }): string => {
-    const a = chart.rows[from]!;
-    const b = chart.rows[to]!;
-    // A bar is as wide as the lines it reaches: the line into or out of it runs straight.
-    const under = a.kind === "bar" && b.kind !== "bar" ? barBox(a) : null;
-    const x1 =
-      under && lineX(b) >= under.left && lineX(b) <= under.left + under.width
-        ? lineX(b)
-        : lineX(a);
-    const x2 = b.kind === "bar" ? x1 : lineX(b);
-    const y1 = top + a.y + leave(a);
-    const y2 = top + b.y + enter(b);
-    if (x1 === x2) return `M ${x1} ${y1} V ${y2}`;
-    // Down its own column, then across just over the row it goes to.
-    const across = top + b.y - DROP;
-    const dir = x2 > x1 ? 1 : -1;
-    return `M ${x1} ${y1} V ${across - TURN} Q ${x1} ${across} ${x1 + dir * TURN} ${across} H ${x2 - dir * TURN} Q ${x2} ${across} ${x2} ${across + TURN} V ${y2}`;
-  };
-
-  return (
-    <div className="flow-chart-body relative" style={{ width, height }}>
-      {/* The columns: what each is, over a hairline. */}
-      {chart.lanes.map((lane, i) => {
-        const fail = lane.key === FAIL_LANE;
-        const Icon = fail
-          ? TriangleAlert
-          : lane.key
-            ? groupIcon(lane.group)
-            : null;
-        const names = fail ? [] : targets(lane.steps);
-        if (!lane.key) return null;
-        return (
-          <div
-            key={lane.key}
-            className="absolute flex items-center gap-2 border-b border-slate-200"
-            style={{
-              left: lefts[i],
-              width: widths[i],
-              top: HEAD_GAP,
-              height: LANE_HEAD,
-            }}
-          >
-            {Icon && (
-              <Icon
-                size={15}
-                strokeWidth={1.75}
-                aria-hidden="true"
-                className="shrink-0"
-                style={{
-                  color: fail
-                    ? "var(--color-shu-600)"
-                    : (CATEGORY_COLOR[lane.group] ?? CATEGORY_COLOR.other),
-                }}
-              />
-            )}
-            <span
-              className={`text-[13.5px] font-semibold whitespace-nowrap ${fail ? "text-shu-600" : "text-ink"}`}
-            >
-              {fail ? words.failed : (lane.name ?? groupLabel(lane.group))}
-            </span>
-            {names.length > 0 && (
-              <span className="min-w-0 truncate font-mono text-[11px] text-slate-500">
-                {names.slice(0, 2).join(" · ")}
-                {names.length > 2 ? ` ${words.more(names.length - 2)}` : ""}
-              </span>
-            )}
-          </div>
-        );
-      })}
-
-      {/* The bands: what repeats, and what runs only sometimes. Outer ones first, so inner ones lie on them. */}
-      {chart.bands.map((b, i) => (
-        <div
-          key={i}
-          className={`flow-chart-band-${b.kind} absolute rounded-[10px]`}
-          style={bandBox(b)}
-        />
-      ))}
-
-      <svg
-        className="pointer-events-none absolute inset-0"
-        width={width}
-        height={height}
-        aria-hidden="true"
-      >
-        {chart.links.map((l) => {
-          const to = chart.rows[l.to]!;
-          const x = to.kind === "bar" ? null : lineX(to);
-          const y = top + to.y;
-          return (
-            <g key={`${l.from}-${l.to}`}>
-              <path d={path(l)} fill="none" stroke="var(--chart-line)" strokeWidth={1.5} />
-              {/* The arrow's head, on the box the line goes to. */}
-              {x !== null && <path d={`M ${x - HEAD} ${y - HEAD - 1} L ${x} ${y} L ${x + HEAD} ${y - HEAD - 1}`} fill="none" stroke="var(--chart-line)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />}
-            </g>
-          );
-        })}
-        {/* A failure anywhere in these rows goes to the column beside them. */}
-        {chart.brackets.map((b, i) => {
-          const x = lefts[chart.failLane!]! - COL_GAP / 2;
-          const to = chart.rows[b.to]!;
-          const out = top + to.y + Math.min(to.h, TILE_H) / 2;
-          return (
-            <g
-              key={i}
-              fill="none"
-              stroke="var(--color-shu-500)"
-              strokeWidth={1.25}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path
-                d={`M ${x - 6} ${top + b.top + 4} H ${x} V ${top + b.bottom - 4} H ${x - 6}`}
-              />
-              <path
-                d={`M ${x} ${out} H ${lineX(to) - TILE_W / 2}`}
-                strokeDasharray="3 4"
-              />
-            </g>
-          );
-        })}
-      </svg>
-
-      {chart.rows.map((row, i) =>
-        row.kind === "bar" ? (
-          <span
-            key={i}
-            className="absolute rounded-full bg-slate-400"
-            style={{ ...barBox(row), top: top + row.y, height: row.h }}
-          />
-        ) : (
-          <RowView
-            key={i}
-            row={row}
-            defs={defs}
-            x={lineX(row)}
-            y={top + row.y}
-            picked={picked}
-            number={numbers ? (numbers.get(row.step.id ?? "") ?? null) : undefined}
-            facts={facts.get(row.step.id ?? "")}
-            numbers={numbers}
-            state={row.step.id ? run?.steps[row.step.id] : undefined}
-            select={(stepId) => {
-              goTo(stepId);
-              onOpen?.();
-            }}
-          />
-        ),
-      )}
-    </div>
-  );
-}
-
-/** A row: its box, with the line at `x` down its middle. */
-function RowView({
-  row,
+function ShapeView({
+  shape,
   defs,
-  x,
-  y,
   picked,
   number,
-  state,
-  select,
   facts,
   numbers,
+  state,
+  onPick,
 }: {
-  /** The step's number on the sheet; null where the sheet gives it none (the words still line up). */
+  shape: Shape;
+  defs: Defs;
+  picked: string | null;
+  /** The step's number on the sheet; null where the sheet gives it none. */
   number?: number | null;
-  /** What the system does at the step, under its name. */
   facts?: Fact[];
   numbers?: ReadonlyMap<string, number>;
   state?: string;
-  row: Exclude<Row, { kind: "bar" }>;
-  defs: Defs;
-  x: number;
-  y: number;
-  picked: string | null;
-  select: (id: string) => void;
+  onPick: (id: string | undefined) => void;
 }) {
   const words = chartWords();
-  const tip = plain(sentence(row.step, defs.get(row.step.type)));
-  // The step the run is on is under the highlighter, as the one picked is.
-  const on = (picked !== null && picked === row.step.id) || state === "running" ? "flow-chart-on" : "";
-  const pick = () => row.step.id && select(row.step.id);
-  const box = { left: x - TILE_W / 2, top: y, width: TILE_W, height: row.h } as const;
-  const edge = state === "failed" ? "border-shu-500" : state === "succeeded" ? "border-moegi-600" : "border-slate-300";
-  const NO = "mr-1.5 inline-block min-w-[16px] shrink-0 text-[11.5px] font-normal text-slate-400 tabular-nums";
+  const at = {
+    left: shape.x,
+    top: shape.y,
+    width: shape.w,
+    height: shape.h,
+  } as const;
+  const edge = state === "failed" ? "border-shu-500" : state === "succeeded" ? "border-moegi-600" : state === "running" ? "border-primary" : "";
 
-  if (row.kind === "step") {
+  if (shape.kind === "bar") return <span className="absolute rounded-full bg-slate-500" style={at} />;
+
+  if (shape.kind === "pill") {
+    const { pill, step } = shape;
+    const fail = pill === "fail" || pill === "caught";
+    const Icon = pill === "start" ? Play : pill === "end" ? Flag : pill === "caught" ? TriangleAlert : step ? (STOP_ICON[step.type] ?? Columns2) : Columns2;
+    const text =
+      pill === "start" ? words.start : pill === "end" ? words.end : pill === "caught" ? words.failed : step ? (step.type === FAIL ? title(step, defs) : guardOutcome(step)) : words.together();
+    const look =
+      pill === "start" || pill === "end"
+        ? "flow-chart-terminal border-transparent font-semibold"
+        : fail
+          ? `border-shu-500 text-shu-600 ${pill === "caught" ? "flow-chart-caught font-semibold" : "bg-sheet"}`
+          : "border-slate-300 bg-sheet text-slate-600";
+    const Tag = step ? "button" : "span";
     return (
-      <button
-        type="button"
-        title={tip}
-        onClick={pick}
-        style={box}
-        className={`flow-chart-node absolute z-10 block rounded-[6px] border px-3 text-left ${edge} ${row.quiet ? "flow-chart-node-quiet" : ""}`}
+      <Tag
+        {...(step
+          ? {
+              type: "button" as const,
+              onClick: () => onPick(step.id),
+              title: plain(sentence(step, defs.get(step.type))),
+            }
+          : {})}
+        style={at}
+        className={`absolute z-10 flex items-center justify-center gap-1.5 rounded-full border px-3 text-[12.5px] whitespace-nowrap ${look}`}
       >
-        <span className="flex items-center" style={{ height: TILE_H - 2 }}>
-          {number != null && <span className={NO}>{number}</span>}
-          <span className={`truncate ${row.quiet ? "text-[12.5px] text-slate-600" : "text-[13.5px] font-medium text-ink"}`}>
-            <span className={on}>{title(row.step, defs)}</span>
-          </span>
-        </span>
-        {facts && facts.length > 0 && (
-          <span className="block" style={{ paddingBottom: FACT_PAD - 2 }}>
-            {facts.map((fact, i) => (
-              <FactLine key={i} fact={fact} numbers={numbers} />
-            ))}
-          </span>
-        )}
+        <Icon size={13} strokeWidth={1.9} aria-hidden="true" className="shrink-0" />
+        <span className="truncate">{text}</span>
+      </Tag>
+    );
+  }
+
+  const { step } = shape;
+  const on = (picked !== null && picked === step.id) || state === "running" ? "flow-chart-on" : "";
+  const tip = plain(sentence(step, defs.get(step.type)));
+
+  if (shape.kind === "ask") {
+    const w = shape.w;
+    const h = shape.h;
+    const tip2 = 16;
+    return (
+      <button type="button" title={tip} onClick={() => onPick(step.id)} style={at} className="flow-chart-ask group absolute z-10 flex items-center justify-center px-6 text-center">
+        {/* A question: a box pointed at both ends. */}
+        <svg className="absolute inset-0 overflow-visible" width={w} height={h} aria-hidden="true">
+          <polygon
+            points={`${tip2},0 ${w - tip2},0 ${w},${h / 2} ${w - tip2},${h} ${tip2},${h} 0,${h / 2}`}
+            className="flow-chart-ask-shape"
+            strokeWidth={state === "failed" || state === "succeeded" ? 1.75 : 1.25}
+            stroke={state === "failed" ? "var(--color-shu-500)" : state === "succeeded" ? "var(--color-moegi-600)" : undefined}
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className={`relative line-clamp-2 text-[13px] leading-[17px] font-medium text-ink ${on}`}>{question(step, defs)}</span>
       </button>
     );
   }
-  if (row.kind === "stop") {
-    const Icon = STOP_ICON[row.step.type] ?? CircleX;
-    const fail = row.step.type === FAIL;
-    return (
-      <span
-        title={tip}
-        style={{ left: x, top: y, height: row.h }}
-        className={`absolute z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-sheet px-3 text-[12.5px] font-medium whitespace-nowrap ${fail ? "border-shu-500 text-shu-600" : "border-slate-300 text-slate-600"}`}
-      >
-        <Icon size={14} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-        {fail ? title(row.step, defs) : guardOutcome(row.step)}
-      </span>
-    );
-  }
-  if (row.kind === "guard") {
-    const Out = STOP_ICON[row.stop.type] ?? CircleX;
-    const fail = row.stop.type === FAIL;
-    return (
-      <button type="button" title={tip} onClick={pick} style={box} className={`flow-chart-node absolute z-10 block rounded-[6px] border px-3 text-left ${edge}`}>
-        <span className="flex items-center gap-2" style={{ height: TILE_H - 2 }}>
-          {/* A decision: a diamond before its question. */}
-          <span className="size-[8px] shrink-0 rotate-45 border-[1.5px] border-slate-500" />
-          <span className={`truncate text-[13.5px] font-medium text-ink ${on}`}>{question(row.step, defs)}</span>
-        </span>
-        {/* The answer that leaves the line here, and where it goes. The other answer is the arrow going on. */}
-        <span className={`flex items-center gap-1.5 text-[12px] ${fail ? "text-shu-600" : "text-slate-500"}`}>
-          <span className="shrink-0 rounded-full border border-slate-200 px-2 leading-[16px] font-medium whitespace-nowrap text-slate-600">
-            {row.block === "then" ? words.yes : words.no}
-          </span>
-          <Out size={13} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-          <span className="truncate">{fail ? title(row.stop, defs) : guardOutcome(row.stop)}</span>
-        </span>
-      </button>
-    );
-  }
-  // Where a band starts: its name on its top edge, its sign on the line.
-  const p = (row.step.params ?? {}) as Record<string, unknown>;
-  const Icon = BAND_ICON[row.band];
-  const text =
-    row.band === "when"
-      ? row.child
-        ? title(row.child, defs)
-        : row.block === "default"
-          ? words.other
-          : question(row.step, defs)
-      : row.band === "always"
-        ? words.always
-        : row.band === "together"
-          ? (row.step.name ?? "").trim() ||
-            words.together(
-              typeof p.maxConcurrency === "number"
-                ? p.maxConcurrency
-                : undefined,
-            )
-          : title(row.step, defs);
-  const more =
-    row.band === "when" && (row.block === "then" || row.block === "else")
-      ? words.onlyWhen(row.block === "then" ? words.yes : words.no)
-      : row.band === "loop" &&
-          typeof p.concurrency === "number" &&
-          p.concurrency > 1
-        ? words.atOnce(p.concurrency)
-        : "";
+
+  // A step's box: its app's icon, its number on the sheet, its name, and what the system does there.
+  const def = defs.get(step.type);
+  const group = def ? groupOf(def) : "other";
+  const Icon = nodeIcon(step.type, group);
+  const minor = shape.minor;
   return (
     <button
       type="button"
       title={tip}
-      onClick={pick}
-      style={{ left: x, top: y, height: row.h }}
-      className="absolute z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-slate-300 bg-sheet pr-3 pl-2 text-left text-[12px] whitespace-nowrap"
+      onClick={() => onPick(step.id)}
+      style={at}
+      className={`flow-chart-node absolute z-10 block rounded-[8px] border text-left ${edge || "border-slate-300"} ${minor ? "flow-chart-node-minor" : ""}`}
     >
-      <span className="flex w-[13px] shrink-0 justify-center">
-        {Icon ? (
-          <Icon
-            size={13}
-            strokeWidth={1.75}
-            aria-hidden="true"
-            className="text-slate-500"
-          />
-        ) : (
-          <span className="size-[5px] rounded-full bg-slate-400" />
-        )}
+      <span
+        className="flex items-start gap-2 px-2.5"
+        style={{
+          paddingTop: BOX_PAD - 2,
+          minHeight: shape.lines * LINE_H + BOX_PAD,
+        }}
+      >
+        <Tile icon={Icon} group={group} size={minor ? 20 : 22} />
+        {number != null && <span className="mt-[2px] min-w-[14px] shrink-0 text-[11.5px] text-slate-400 tabular-nums">{number}</span>}
+        <span className={`mt-[1px] line-clamp-2 leading-[19px] ${minor ? "text-[12.5px] text-slate-600" : "text-[13.5px] font-medium text-ink"}`}>
+          <span className={on}>{title(step, defs)}</span>
+        </span>
       </span>
-      <span className={`font-medium text-ink ${on}`}>{text}</span>
-      {more && <span className="text-slate-500">{more}</span>}
+      {facts && facts.length > 0 && (
+        <span className="block px-2.5 pt-0.5 pl-[42px]">
+          {facts.map((fact, i) => (
+            <FactLine key={i} fact={fact} numbers={numbers} />
+          ))}
+        </span>
+      )}
     </button>
   );
 }
