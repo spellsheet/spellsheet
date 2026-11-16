@@ -112,9 +112,16 @@ function linesOf(placed: Placed[]): { lines: Line[]; labels: Label[] } {
         lines.push({ points: [[cx, top], [cx, over], [tx, over], [tx, target.y - target.h / 2]], head: true });
         labels.push({ text: ask.skip.answer, x: (cx + tx) / 2, y: over - 10, center: true });
       } else {
-        // What follows the skipped steps is on the next row: the skip joins the line going round to it.
-        const right = rowEnd(cur.row) + 18;
-        lines.push({ points: [[cx, top], [cx, over], [right, over], [right, cur.y]], head: false });
+        // What follows the skipped steps starts a later row: the skip comes down the right side
+        // and joins the line going round to it, past the rows it skips.
+        const last = placed[i + ask.skip.over];
+        const lastRow = last?.row ?? cur.row;
+        const rows = Array.from({ length: lastRow - cur.row + 1 }, (_, k) => cur.row + k);
+        const right = Math.max(...rows.map(rowEnd)) + (lastRow > cur.row ? 30 : 18);
+        const join = rowEnd(lastRow) + 18;
+        const turn = last ? last.y + ASK_H / 2 + (last.under ?? UNDER) + 18 : cur.y;
+        const points: [number, number][] = lastRow > cur.row ? [[cx, top], [cx, over], [right, over], [right, turn], [join, turn]] : [[cx, top], [cx, over], [right, over], [right, cur.y]];
+        lines.push({ points, head: false });
         labels.push({ text: ask.skip.answer, x: (cx + right) / 2, y: over - 10, center: true });
       }
     }

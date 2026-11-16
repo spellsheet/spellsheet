@@ -77,8 +77,18 @@ const live = (list: Step[] | undefined): Step[] => (list ?? []).filter((s) => !s
 const stops = (step: Step | undefined): boolean => !!step && STOPS.has(step.type);
 /** Every step in a list, and in what each holds. */
 const all = (list: Step[]): Step[] => list.flatMap((s) => [s, ...all(Object.values(s.blocks ?? {}).flatMap(live))]);
-/** A list that ends in a stop: taking it, the flow does not go on. */
-const ends = (list: Step[]): boolean => stops(list.at(-1));
+/** The step that stops a list, when taking it the flow does not go on: a stop in it, or in a group in it. */
+const stopIn = (list: Step[]): Step | undefined => {
+  for (const s of live(list)) {
+    if (stops(s)) return s;
+    if (s.type === GROUP) {
+      const inner = stopIn(s.blocks?.body ?? []);
+      if (inner) return inner;
+    }
+  }
+  return undefined;
+};
+const ends = (list: Step[]): boolean => !!stopIn(list);
 /** How a step runs what it holds, when it is drawn as a box of its own. */
 const markOf = (step: Step): Mark | null => (LOOP_TYPES.has(step.type) || step.type === WAIT_UNTIL ? "loop" : step.type === TRY ? "try" : step.type === PARALLEL ? "parallel" : null);
 /** Big enough to show: two steps or more inside. A loop round one step stays in the box it stands in. */
@@ -139,7 +149,7 @@ export function outline(steps: Step[], words: Words): Node[] {
         if (stopping) {
           flush();
           const [stopBlock, stopList, goBlock, goList] = stopping;
-          const last = stopList.at(-1)!;
+          const last = stopIn(stopList)!;
           out.push({ kind: "ask", step, text: asked.text, go: way(goBlock), stop: { answer: way(stopBlock), why: words.stop(last), step: last } });
           walk(goList, within);
           continue;
@@ -159,6 +169,8 @@ export function outline(steps: Step[], words: Words): Node[] {
           flush();
           group = outer;
           named = wasNamed;
+          // The other answer goes on, whatever this one does.
+          open = true;
           ask.skip!.over = out.length - before;
           if (ask.skip!.over === 0) delete ask.skip;
           continue;
@@ -239,12 +251,17 @@ const sizeOf = (node: Node): [number, number] => (node.kind === "box" ? [BOX_W, 
 export function place(nodes: Node[], width: number): Overview {
   const rows: Node[][] = [[]];
   let used = 0;
+  /** Where a row must start: after a skip too wide for one row, so the skip can come down to what follows it. */
+  const starts = new Set<number>();
   const fits = (w: number) => used === 0 || used + GAP + w <= width;
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i]!;
     let need = sizeOf(node)[0];
-    if (node.kind === "ask" && node.skip) for (let k = 1; k <= node.skip.over && i + k < nodes.length; k++) need += GAP + sizeOf(nodes[i + k]!)[0];
-    if (!fits(need) && rows.at(-1)!.length > 0) {
+    if (node.kind === "ask" && node.skip) {
+      for (let k = 1; k <= node.skip.over && i + k < nodes.length; k++) need += GAP + sizeOf(nodes[i + k]!)[0];
+      if (need > width) starts.add(i + node.skip.over + 1);
+    }
+    if ((!fits(need) || starts.has(i)) && rows.at(-1)!.length > 0) {
       rows.push([]);
       used = 0;
     }

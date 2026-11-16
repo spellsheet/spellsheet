@@ -69,6 +69,20 @@ describe("outline", () => {
     expect(boxes(nodes)[2]!.caught?.text).toBe("catch：記録する");
   });
 
+  it("treats an answer whose group stops as a stop, and goes on with the other", () => {
+    const fail = named("control.fail", "見つからない");
+    const nodes = outline([named("control.if", "q", { then: [named("control.group", "諦める", { body: [step("記録"), fail] })], else: [] }), step("after")], words);
+    expect(kinds(nodes)).toEqual(["start", "ask", "box", "end"]);
+    expect(asks(nodes)[0]!.stop?.step).toBe(fail);
+    expect(boxes(nodes)[0]!.steps.map((x) => x.name)).toEqual(["after"]);
+  });
+
+  it("goes on after a skip whose steps stop part way", () => {
+    const nodes = outline([named("control.if", "q", { then: [named("control.group", "g", { body: [named("control.if", "r", { then: [named("control.fail", "x")], else: [step("y")] })] }), step("z")], else: [] }), step("after")], words);
+    expect(kinds(nodes).at(-1)).toBe("end");
+    expect(boxes(nodes).some((b) => b.steps.some((x) => x.name === "after"))).toBe(true);
+  });
+
   it("says each way of a question with several under it", () => {
     const nodes = outline([named("control.if", "ログイン済み", { then: [step("a"), step("b")], else: [step("c")] })], words);
     expect(asks(nodes)[0]!.ways?.map((w) => w.text)).toEqual(["then：a", "else：c"]);
@@ -96,5 +110,16 @@ describe("place", () => {
     expect(ov.placed[at + 1]!.row).toBe(ask.row);
     expect(ov.placed[at + 2]!.row).toBe(ask.row);
     for (const v of ov.placed.flatMap((p) => [p.x, p.y, p.w, p.h])) expect(Number.isFinite(v)).toBe(true);
+  });
+
+  it("starts a row after a skip too wide for one row, so the skip comes down to what follows it", () => {
+    const groups = ["a", "b", "c", "d"].map((g) => named("control.group", g, { body: [step(g)] }));
+    const nodes = outline([named("control.if", "q", { then: groups, else: [] }), step("after")], words);
+    const ov = place(nodes, 852);
+    const at = ov.placed.findIndex((p) => p.node.kind === "ask");
+    const over = (ov.placed[at]!.node as AskNode).skip!.over;
+    const next = ov.placed[at + over + 1]!;
+    expect(next.row).toBeGreaterThan(ov.placed[at + over]!.row);
+    expect(ov.placed.filter((p) => p.row === next.row)[0]).toBe(next);
   });
 });
