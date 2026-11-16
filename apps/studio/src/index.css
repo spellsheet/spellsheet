@@ -365,54 +365,21 @@ textarea {
 
 /*
  * The chart to read (components/chart): drawn on the sheet's paper (components/sheet) in the
- * sheet's own terms: a hairline box for each step, arrows between them, and
+ * sheet's own terms: a hairline box for each part of the flow, arrows between them, and
  * colour only where the sheet has it (the highlighter, and vermilion for what fails).
  */
 .flow-chart {
-  --chart-line: var(--color-slate-400);
-  --chart-back: var(--cat-browser);
+  --chart-main: #2b4a73;
   --chart-ask: #fff7e6;
   --chart-ask-edge: #d9a441;
   background-color: var(--manual-desk);
 }
 [data-theme="dark"] .flow-chart {
+  --chart-main: #8fb0d9;
   --chart-ask: #2a2414;
   --chart-ask-edge: #8f7333;
 }
-/* A frame: what repeats is tinted, a group is a plain box with its name in a strip at the top. */
-.flow-chart-frame {
-  border: 1px solid var(--color-slate-300);
-  background: color-mix(in srgb, var(--color-sheet) 60%, transparent);
-}
-.flow-chart-frame-head {
-  border-bottom: 1px solid var(--color-slate-200);
-  background: var(--color-slate-50);
-}
-.flow-chart-frame-head:hover {
-  background: var(--color-slate-100);
-}
-.flow-chart-frame-icon {
-  color: var(--color-slate-500);
-}
-.flow-chart-frame-loop {
-  border-color: color-mix(in srgb, var(--chart-back) 45%, transparent);
-  background: var(--manual-loop-bg);
-}
-.flow-chart-frame-loop > .flow-chart-frame-head {
-  background: color-mix(in srgb, var(--chart-back) 12%, var(--color-sheet));
-  border-bottom-color: color-mix(in srgb, var(--chart-back) 25%, transparent);
-}
-.flow-chart-frame-loop .flow-chart-frame-icon {
-  color: var(--chart-back);
-}
-.flow-chart-frame-try {
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--color-shu-500) 55%, transparent);
-}
-.flow-chart-frame-try .flow-chart-frame-icon {
-  color: var(--color-shu-500);
-}
-/* A step: a box on the line. A wait or a check the sheet gives no number is a quieter one. */
+/* A box of steps on the line. */
 .flow-chart-node {
   background: var(--color-sheet);
   box-shadow: 0 1px 2px rgb(16 24 40 / 0.06);
@@ -420,12 +387,16 @@ textarea {
 .flow-chart-node:hover {
   border-color: var(--color-slate-500);
 }
-.flow-chart-node-minor {
-  background: var(--color-slate-50);
-  box-shadow: none;
-  border-style: dashed;
+/* A part of the flow drawn as one box: what repeats, and what is guarded against failure. */
+.flow-chart-box-loop {
+  border-color: color-mix(in srgb, var(--chart-main) 55%, transparent);
+  background: color-mix(in srgb, var(--chart-main) 6%, var(--color-sheet));
 }
-/* A question: a box pointed at both ends. */
+.flow-chart-box-try {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-shu-500) 60%, transparent);
+}
+/* A question: a diamond on the line. */
 .flow-chart-ask-shape {
   fill: var(--chart-ask);
   stroke: var(--chart-ask-edge);
@@ -438,6 +409,7 @@ textarea {
   background: var(--color-ink);
   color: var(--color-sheet);
 }
+/* Where it stops. */
 .flow-chart-caught {
   background: color-mix(in srgb, var(--color-shu-500) 10%, var(--color-sheet));
 }

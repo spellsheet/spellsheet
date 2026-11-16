@@ -248,18 +248,13 @@ export function guardOutcome(stop: Step): string {
 export function chartWords() {
   const ja = locale === "ja";
   return {
-    /** After a band's question and answer: "はい のときだけ". */
-    onlyWhen: (answer: string) => (ja ? `${answer} のときだけ` : `only when ${answer}`),
-    other: ja ? "その他のとき" : "Otherwise",
-    always: ja ? "最後に必ず" : "Always at the end",
-    failed: ja ? "失敗したとき" : "On failure",
-    failEnd: ja ? "失敗として終える" : "Stop as failed",
     yes: ja ? "はい" : "Yes",
     no: ja ? "いいえ" : "No",
+    other: ja ? "その他のとき" : "Otherwise",
     more: (n: number) => (ja ? `ほか ${n}` : `+${n}`),
     start: ja ? "開始" : "Start",
     end: ja ? "終了" : "End",
-    /** Beside a loop's name: how it goes round. */
+    /** Under a loop's name: how it goes round. */
     loopNote: (step: Step): string => {
       const p = (step.params ?? {}) as Record<string, unknown>;
       if (step.type === "control.forEach") return ja ? "1 件ずつ繰り返す" : "for each item";
@@ -267,37 +262,22 @@ export function chartWords() {
       if (step.type === "wait.until") return ja ? "条件を満たすまで確かめる" : "until the condition holds";
       return ja ? "条件を満たす間繰り返す" : "while the condition holds";
     },
-    /** Beside a group's name, when it is tried again on failure: `n` tries in all. */
-    tries: (n: number) => (ja ? `うまくいかなければやり直す（${n} 回まで）` : `tried again on failure (up to ${n} times)`),
-    /** The frame round what a failure is caught from, when it has no name. */
+    /** Under a guard against failure that has no name of its own. */
     guarded: ja ? "失敗に備える" : "Guarded",
-    zoomIn: ja ? "拡大" : "Zoom in",
-    zoomOut: ja ? "縮小" : "Zoom out",
-    fit: ja ? "全体を表示" : "Fit",
-    actual: ja ? "100% で表示" : "Actual size",
-    addHere: ja ? "ここに手順を追加" : "Add a step here",
-    /** Where branches part to run at the same time; `limit` when only so many run at once. */
-    together: (limit?: number) => (ja ? `同時に進める${limit ? `（${limit} つまで）` : ""}` : `At the same time${limit ? ` (up to ${limit})` : ""}`),
-    /** After a loop's name, when its rounds run at the same time. */
-    atOnce: (n: number) => (ja ? `${n} 件ずつ同時に` : `${n} at a time`),
-    /** What the system does at a step (lib/systemFacts.ts): the name of each kind, then its value. */
-    facts: {
-      connect: ja ? "接続先" : "Connects to",
-      launch: ja ? "起動" : "Starts",
-      target: ja ? "対象" : "Works on",
-      read: ja ? "読み取り" : "Reads",
-      write: ja ? "書き込み" : "Writes",
-      secret: ja ? "シークレット" : "Secret",
-      wait: ja ? "待機" : "Waits",
-      retry: ja ? "再試行" : "Retries",
-      take: ja ? "受け取り" : "Takes",
-      give: ja ? "引き渡し" : "Gives",
-    },
-    upTo: (seconds: number) => (ja ? `最大 ${seconds} 秒` : `up to ${seconds} s`),
-    attempts: (n: number) => (ja ? `${n} 回まで` : `up to ${n} times`),
-    fromStep: (n: string) => (ja ? `${n} から` : `from ${n}`),
-    toSteps: (n: string) => (ja ? `${n} へ` : `to ${n}`),
-    atStart: ja ? "開始時の入力" : "given at the start",
-    flowOutput: ja ? "フローの出力" : "the flow's output",
+    /** Under branches that run at the same time. */
+    together: ja ? "同時に進める" : "At the same time",
+    /** Under a box of the chart: the numbers of its steps on the sheet. */
+    stepRange: (from: number, to: number) => (ja ? (from === to ? `手順 ${from}` : `手順 ${from}〜${to}`) : from === to ? `Step ${from}` : `Steps ${from}–${to}`),
+    /** Under a box of the chart, when its group is tried again: `n` tries in all. */
+    triesShort: (n: number) => (ja ? `${n} 回までやり直す` : `up to ${n} tries`),
+    /** Where the flow stops, and why. */
+    stopsWith: (why: string) => (ja ? `止まる：${why}` : `Stops: ${why}`),
+    /** On a box of the chart: how far a run got in it. */
+    runningHere: ja ? "実行中" : "Running",
+    failedHere: ja ? "ここで失敗" : "Failed here",
+    /** After the first step of a way that has more: "ほか". */
+    andMore: ja ? " ほか" : " and more",
+    /** Under a guard against failure: what runs when it fails. */
+    whenFailed: (what: string) => (ja ? `失敗したとき：${what}` : `On failure: ${what}`),
   };
 }

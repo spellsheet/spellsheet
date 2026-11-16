@@ -1,7 +1,7 @@
 // The flow as one sheet of paper: what it is for and what it works with at
 // the top, then its work in order, in sentences, with the screens it touches
 // in the margin. Read as a chart, the same paper keeps its heading and shows
-// the chart (components/chart/ChartBody.tsx) under it.
+// the chart (components/chart/OverviewBody.tsx) under it.
 import { useRunGate } from "../../lib/runGate";
 import { ArrowDown, ArrowUp, Check, CircleCheck, CircleMinus, CirclePause, CircleX, ArrowRight, Download, EyeOff, FileSpreadsheet, FileText, Globe, History, Play, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +25,7 @@ import type { HistoryEntry, PublishedState, StepTypeDef, VersionSummary } from "
 import { menuFor } from "../../lib/contextMenu";
 import { useFlowBusy } from "../../lib/useFlowBusy";
 import { useStepMenu } from "../menus";
-import { ChartBody } from "../chart/ChartBody";
+import { OverviewBody } from "../chart/OverviewBody";
 import { StepInspector } from "../inspector/StepInspector";
 import { ExportDialog, MaskEditor, type Pictures, ShotFrame, WholeShot, day, madeLine, shotLine, usePictures, useSubflows } from "./pictures";
 import { SheetHeading } from "../SheetHeading";
@@ -894,7 +894,7 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
             noSteps ? (
               <p className="px-10 pt-2 pb-12 text-[13px] text-slate-500">{t.sheetView.noStepsChart}</p>
             ) : (
-              <ChartBody numbers={numbers} run={run} onOpen={onSheet} />
+              <OverviewBody numbers={numbers} run={run} onOpen={onSheet} />
             )
           ) : (
             <div className="flow-root px-10 pb-16 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
