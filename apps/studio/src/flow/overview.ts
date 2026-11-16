@@ -145,7 +145,12 @@ export function outline(steps: Step[], words: Words): Node[] {
         // Asked the other way round, "then" is the answer no.
         const way = (block: string) => words.answer(asked.flipped ? (block === "then" ? "else" : "then") : block);
         // One answer only stops: down to its stop, and on with the other.
-        const stopping = ends(yes) && !ends(no) ? (["then", yes, "else", no] as const) : ends(no) && !ends(yes) ? (["else", no, "then", yes] as const) : null;
+        // Only when it does nothing the sheet numbers before stopping: what it does first is drawn, not hidden.
+        const onlyStops = (list: Step[]) => {
+          const stop = stopIn(list);
+          return !!stop && !words.range(all(list).filter((s) => s !== stop && s.type !== GROUP));
+        };
+        const stopping = onlyStops(yes) && !ends(no) ? (["then", yes, "else", no] as const) : onlyStops(no) && !ends(yes) ? (["else", no, "then", yes] as const) : null;
         if (stopping) {
           flush();
           const [stopBlock, stopList, goBlock, goList] = stopping;

@@ -120,8 +120,14 @@ function linesOf(placed: Placed[]): { lines: Line[]; labels: Label[] } {
         const right = Math.max(...rows.map(rowEnd)) + (lastRow > cur.row ? 30 : 18);
         const join = rowEnd(lastRow) + 18;
         const turn = last ? last.y + ASK_H / 2 + (last.under ?? UNDER) + 18 : cur.y;
-        const points: [number, number][] = lastRow > cur.row ? [[cx, top], [cx, over], [right, over], [right, turn], [join, turn]] : [[cx, top], [cx, over], [right, over], [right, cur.y]];
-        lines.push({ points, head: false });
+        // Skipped steps that end in a stop send no line round: the skip goes all the way to what follows.
+        const alone = last?.node.kind === "stop" && target;
+        const points: [number, number][] = alone
+          ? [[cx, top], [cx, over], [right, over], [right, turn], [target.x - 18, turn], [target.x - 18, target.y], [target.x, target.y]]
+          : lastRow > cur.row
+            ? [[cx, top], [cx, over], [right, over], [right, turn], [join, turn]]
+            : [[cx, top], [cx, over], [right, over], [right, cur.y]];
+        lines.push({ points, head: !!alone });
         labels.push({ text: ask.skip.answer, x: (cx + right) / 2, y: over - 10, center: true });
       }
     }

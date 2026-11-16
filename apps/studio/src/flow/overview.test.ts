@@ -71,10 +71,17 @@ describe("outline", () => {
 
   it("treats an answer whose group stops as a stop, and goes on with the other", () => {
     const fail = named("control.fail", "見つからない");
-    const nodes = outline([named("control.if", "q", { then: [named("control.group", "諦める", { body: [step("記録"), fail] })], else: [] }), step("after")], words);
+    const nodes = outline([named("control.if", "q", { then: [named("control.group", "諦める", { body: [named("log.message", "記録"), fail] })], else: [] }), step("after")], words);
     expect(kinds(nodes)).toEqual(["start", "ask", "box", "end"]);
     expect(asks(nodes)[0]!.stop?.step).toBe(fail);
     expect(boxes(nodes)[0]!.steps.map((x) => x.name)).toEqual(["after"]);
+  });
+
+  it("draws what an answer does before it stops, and skips it on the other answer", () => {
+    const nodes = outline([named("control.if", "q", { then: [step("記録を消す"), named("control.fail", "止める")], else: [] }), step("after")], words);
+    expect(kinds(nodes)).toEqual(["start", "ask", "box", "stop", "box", "end"]);
+    expect(asks(nodes)[0]!.skip?.over).toBe(2);
+    expect(boxes(nodes)[0]!.steps.map((x) => x.name)).toEqual(["記録を消す"]);
   });
 
   it("goes on after a skip whose steps stop part way", () => {
