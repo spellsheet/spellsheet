@@ -288,6 +288,7 @@ export function FlowsPage() {
   const setPlace = useStudio((s) => s.setPlace);
   const duplicate = useStudio((s) => s.duplicate);
   const remove = useStudio((s) => s.remove);
+  const fail = useStudio((s) => s.fail);
   const store = useStudioApi();
   const agentStore = useAgentApi();
   const open = useOpen();
@@ -314,7 +315,7 @@ export function FlowsPage() {
           void duplicate(s.id);
         },
       },
-      { label: t.menu.openFlowFolder, icon: FolderOutput, run: () => void projectApi.open(s.id, "", false).catch(() => {}) },
+      { label: t.menu.openFlowFolder, icon: FolderOutput, run: () => void projectApi.open(s.id, "", false).catch((e) => fail(t.couldNot.openFolder, e)) },
       { label: t.handOff.open, icon: Send, run: () => void openHandOff(s.id) },
       { label: t.menu.copyId, icon: Copy, run: () => copyText(s.id) },
       "-",

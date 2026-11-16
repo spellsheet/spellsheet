@@ -48,6 +48,14 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
 }
 
 describe("studio store", () => {
+  it("says on the banner what a press could not do, and why, until it is closed", () => {
+    const store = createStudioStore(fakeApi({}));
+    store.getState().fail(t.couldNot.openFolder, new Error("access denied"));
+    expect(store.getState().error).toBe(t.failed(t.couldNot.openFolder, "access denied"));
+    store.getState().dismiss();
+    expect(store.getState().error).toBeNull();
+  });
+
   it("keeps the right pane for a picked node, or for the flow's settings only while kept open", () => {
     const store = createStudioStore(fakeApi({}));
     expect(store.getState().inspectorOpen).toBe(false);

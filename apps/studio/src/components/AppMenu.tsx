@@ -131,10 +131,11 @@ function McpSetup({ cliPath, initial }: { cliPath: string; initial: McpClient })
   );
 }
 
-const useApp = create<{ info: AppInfo | null; state: UpdateState; started: boolean }>(() => ({
+const useApp = create<{ info: AppInfo | null; state: UpdateState; started: boolean; noInfo: boolean }>(() => ({
   info: null,
   state: { kind: "idle" },
   started: false,
+  noInfo: false,
 }));
 
 async function check() {
@@ -163,7 +164,8 @@ function start() {
       useApp.setState({ info });
       if (info.updatesEnabled) void check();
     })
-    .catch(() => {});
+    // Said in the settings' version section: without it, no update is looked for.
+    .catch((e) => useApp.setState({ state: { kind: "error", message: message(e) }, noInfo: true }));
   void updates.onProgress((p) => {
     const s = useApp.getState().state;
     if (s.kind === "downloading") {
@@ -197,7 +199,28 @@ export function AboutSection() {
   useEffect(start, []);
   const info = useApp((s) => s.info);
   const state = useApp((s) => s.state);
-  if (!info) return null;
+  const noInfo = useApp((s) => s.noInfo);
+  if (!info) {
+    // The version could not be read: say so, and let it be tried again, rather than show nothing.
+    if (!noInfo) return null;
+    return (
+      <SettingsGroup>
+        <SettingsRow label={t.appVersion} hint={t.updateNoInfo}>
+          <button
+            type="button"
+            onClick={() => {
+              useApp.setState({ started: false, noInfo: false, state: { kind: "idle" } });
+              start();
+            }}
+            className="text-brand-600 hover:underline"
+          >
+            {t.updateCheck}
+          </button>
+          {state.kind === "error" && <p className="mt-1 break-all text-shu-600">{state.message}</p>}
+        </SettingsRow>
+      </SettingsGroup>
+    );
+  }
   return (
     <SettingsGroup>
       <SettingsRow label={t.appVersion} hint={!info.updatesEnabled ? t.updatesDisabled : undefined}>

@@ -181,6 +181,17 @@ export const ja = {
   newFlow: "新規作成",
   newFlowPrompt: "フロー名",
   defaultFlowName: "新しいフロー",
+  /** On the banner: what could not be done, then why. */
+  failed: (what: string, why: string) => `${what}できませんでした：${why}`,
+  /** What could not be done, for `failed`. */
+  couldNot: {
+    openFolder: "フォルダーを開くことが",
+    openRunner: "実行画面を開くことが",
+    openLink: "リンクを開くことが",
+    saveMasks: "画像の伏せ字を保存",
+    loadManual: "手順書の画像と伏せ字を読み込むことが",
+    setBreakpoints: "一時停止の位置を実行中のフローに反映",
+  },
   duplicateFlowName: (name: string) =>
     `「${name}」という名前のフローがもうあります。フローごとのフォルダーに名前を使うので、別の名前にしてください`,
   duplicate: "複製",
@@ -685,6 +696,7 @@ export const ja = {
   updateInstalling: "更新しています。すぐに Writer が開き直します…",
   updateCheck: "もう一度確認",
   updatesDisabled: "開発版のため自動更新は行いません。",
+  updateNoInfo: "この版の情報を読めなかったため、更新を確かめられません。",
   mcpSetup: "ほかの AI アプリへの登録",
   mcpSetupHint: "Cursor や Claude Code など、使っている AI から SpellSheet でフローを組むための登録です。AI ごとに一度だけ行います。更新しても登録し直す必要はありません",
   mcpNoCli: "SpellSheet のコマンド（spellsheet.exe）が見つかりません。SpellSheet をインストールし直してください",
@@ -2283,6 +2295,7 @@ export const ja = {
     elapsed: (time: string) => `${time} 経過`,
     pause: "一時停止",
     stop: "中止",
+    notDone: (what: string) => `${what}できませんでした。Writer で止めてください`,
     writer: "Writer に戻す",
     close: "閉じる",
     waiting: "操作を待っています",

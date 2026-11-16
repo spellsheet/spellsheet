@@ -17,3 +17,9 @@ export function useStudioApi(): StoreApi<StudioState> {
   if (!store) throw new Error("StudioContext is missing");
   return store;
 }
+
+/** Says on the banner that something could not be done; outside Writer (no store), it is only logged. */
+export function useFail(): (what: string, e: unknown) => void {
+  const store = useContext(StudioContext);
+  return (what, e) => (store ? store.getState().fail(what, e) : console.error(what, e));
+}

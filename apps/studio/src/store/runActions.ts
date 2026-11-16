@@ -214,7 +214,7 @@ export const runActions = ({ api, set, get }: StoreContext) => {
       set({ breakpoints });
       const run = get().run;
       if (run && isActive(run) && run.flowId === get().flow?.id) {
-        void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: runBreakpoints(get()) }).catch(() => {});
+        void api.debugRun(run.runId, { action: "setBreakpoints", stepIds: runBreakpoints(get()) }).catch((e) => set({ error: t.failed(t.couldNot.setBreakpoints, message(e)) }));
       }
     },
 
@@ -457,6 +457,9 @@ export const runActions = ({ api, set, get }: StoreContext) => {
 
     dismiss() {
       set({ notice: null, error: null });
+    },
+    fail(what, e) {
+      set({ error: t.failed(what, message(e)) });
     },
   } satisfies Partial<StudioState>;
 };

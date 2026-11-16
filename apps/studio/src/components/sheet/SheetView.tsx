@@ -747,6 +747,7 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
   const run = useStudio(trailOf);
   const place = useStudio((s) => s.place);
   const approveAll = useStudio((s) => s.approveAll);
+  const fail = useStudio((s) => s.fail);
   const aiBusy = useFlowBusy();
   const todo = useRunGate((g) => (g.flowId === flow?.id ? g.todo : null));
   const subflows = useSubflows(flow);
@@ -768,7 +769,7 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
         setMasks(m.masks ?? {});
         setDrafts(m.drafts ?? {});
       })
-      .catch(() => {});
+      .catch((e) => live && fail(t.couldNot.loadManual, e));
     void api
       .listSchedules()
       .then((list) => live && setSchedules(list.schedules.filter((s) => s.flowId === flowId && s.enabled)))
@@ -959,9 +960,14 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
           mask={masks[masking.key]}
           onCancel={() => setMasking(null)}
           onSave={(mask) => {
+            const before = masks;
             const next = { ...masks, [masking.key]: mask };
             setMasks(next);
-            void manualApi.saveMasks(flow.id, next).catch(() => {});
+            // Not saved, the blurring would be gone the next time: put it back as it was and say so.
+            void manualApi.saveMasks(flow.id, next).catch((e) => {
+              setMasks(before);
+              fail(t.couldNot.saveMasks, e);
+            });
             setMasking(null);
           }}
         />
