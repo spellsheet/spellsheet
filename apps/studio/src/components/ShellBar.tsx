@@ -280,6 +280,7 @@ function CommandDialog({ onClose }: { onClose: () => void }) {
   const setPlace = useStudio((s) => s.setPlace);
   const startRun = useStudio((s) => s.startRun);
   const run = useStudio((s) => s.run);
+  const fail = useStudio((s) => s.fail);
   const agent = useAgentApi();
   const list = useRef<HTMLDivElement>(null);
   const commands = useMemo<Command[]>(() => {
@@ -327,7 +328,7 @@ function CommandDialog({ onClose }: { onClose: () => void }) {
       ...(flow && !isActive(run) ? [{ id: "run", group: "commands" as const, icon: Play, label: t.shell.runCommand, hint: "F5", run: () => void startRun() }] : []),
       { id: "ai-toggle", group: "commands", icon: MessageSquareText, label: t.shell.toggleAi, hint: "Ctrl+J", run: () => agent.getState().setOpen(!agent.getState().open) },
       { id: "theme", group: "commands", icon: Moon, label: t.shell.themeCommand(document.documentElement.dataset.theme === "dark" ? t.bar.themeLight : t.bar.themeDark), run: () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark") },
-      { id: "runner", group: "commands", icon: AppWindow, label: t.runner.open, run: () => void runnerApi.openWindow().catch(() => {}) },
+      { id: "runner", group: "commands", icon: AppWindow, label: t.runner.open, run: () => void runnerApi.openWindow().catch((e) => fail(t.couldNot.openRunner, e)) },
     ];
     for (const c of actions) if (hit(c.label)) out.push(c);
     return out;

@@ -9,7 +9,7 @@
 import type { FileStamp, RunReport, StepTypeDef } from "@spellsheet/schema";
 import { FolderOpen, Play, FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useStudio } from "../context";
+import { useFail, useStudio } from "../context";
 import { api, type RunRecord } from "../lib/api";
 import { formatValue } from "../lib/changes";
 import { locale, t } from "../lib/i18n";
@@ -168,6 +168,7 @@ function useRunPaper(runId: string) {
 }
 
 function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | null; onView: (view: View) => void }) {
+  const fail = useFail();
   const flow = useStudio((s) => s.flow);
   const stepTypes = useStudio((s) => s.stepTypes);
   const startRun = useStudio((s) => s.startRun);
@@ -300,7 +301,7 @@ function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | nu
         {flowId && (
           <button
             type="button"
-            onClick={() => void projectApi.open(flowId, "output", false).catch(() => undefined)}
+            onClick={() => void projectApi.open(flowId, "output", false).catch((e) => fail(t.couldNot.openFolder, e))}
             className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3.5 text-[13px] hover:bg-slate-50"
           >
             <FolderOpen size={14} strokeWidth={1.75} aria-hidden="true" />

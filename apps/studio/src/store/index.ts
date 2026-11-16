@@ -349,6 +349,8 @@ export type StudioState = {
   hideTrail(): void;
   clearLog(): void;
   dismiss(): void;
+  /** Says on the banner that `what` could not be done, and why (for a press that would otherwise do nothing). */
+  fail(what: string, e: unknown): void;
   loadHistory(): Promise<void>;
   approve(revision: number): void;
   /** Marks every unreviewed external change of the open flow as looked at (this PC only). */

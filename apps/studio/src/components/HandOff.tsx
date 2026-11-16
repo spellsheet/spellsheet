@@ -124,6 +124,7 @@ export function HandOffDialog() {
   const folders = useStudio((s) => s.distribution.folders);
   const checkDistribution = useStudio((s) => s.checkDistribution);
   const placeInDistribution = useStudio((s) => s.placeInDistribution);
+  const fail = useStudio((s) => s.fail);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [folder, setFolder] = useState("");
@@ -158,7 +159,7 @@ export function HandOffDialog() {
     setBusy(true);
     const out = await exportPackage(plan.flowId, { content: current ? "current" : "auto", versions: "content", includeInput: true, only: only() });
     setBusy(false);
-    if (out) void api.revealFile(out.path).catch(() => {});
+    if (out) void api.revealFile(out.path).catch((e) => fail(t.couldNot.openFolder, e));
   };
   const d = t.distribution;
   const target = folders.some((f) => f.name === folder) ? folder : (folders[0]?.name ?? "");

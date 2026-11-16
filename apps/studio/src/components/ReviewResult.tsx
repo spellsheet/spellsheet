@@ -3,7 +3,7 @@
 // returned, and the table of files and systems the flow works with.
 import { AlertTriangle, CloudUpload, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useStudio } from "../context";
+import { useFail, useStudio } from "../context";
 import { formatValue } from "../lib/changes";
 import { locale, t } from "../lib/i18n";
 import { baseName, type FilePreview, loadPreview, type Picture } from "../lib/preview";
@@ -47,6 +47,7 @@ export function FileBox({
   /** A line under the head, e.g. whether the file is still as a run left it. */
   note?: React.ReactNode;
 }) {
+  const fail = useFail();
   const [sheet, setSheet] = useState<string | undefined>(undefined);
   const loaded = useFile(flowId, path, sheet, stamp);
   const preview = loaded?.preview;
@@ -62,7 +63,7 @@ export function FileBox({
         {flowId && preview && preview.kind !== "missing" && (
           <button
             type="button"
-            onClick={() => void projectApi.open(flowId, path, false).catch(() => undefined)}
+            onClick={() => void projectApi.open(flowId, path, false).catch((e) => fail(t.couldNot.openFolder, e))}
             className="ml-auto flex shrink-0 items-center gap-1 text-[12.5px] text-brand-600 hover:underline"
           >
             <ExternalLink size={13} aria-hidden="true" />

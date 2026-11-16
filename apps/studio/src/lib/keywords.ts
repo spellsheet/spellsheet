@@ -257,6 +257,25 @@ export function chartWords() {
     yes: ja ? "はい" : "Yes",
     no: ja ? "いいえ" : "No",
     more: (n: number) => (ja ? `ほか ${n}` : `+${n}`),
+    start: ja ? "開始" : "Start",
+    end: ja ? "終了" : "End",
+    /** Beside a loop's name: how it goes round. */
+    loopNote: (step: Step): string => {
+      const p = (step.params ?? {}) as Record<string, unknown>;
+      if (step.type === "control.forEach") return ja ? "1 件ずつ繰り返す" : "for each item";
+      if (step.type === "control.repeat") return typeof p.count === "number" ? (ja ? `${p.count} 回繰り返す` : `${p.count} times`) : ja ? "決まった回数繰り返す" : "a set number of times";
+      if (step.type === "wait.until") return ja ? "条件を満たすまで確かめる" : "until the condition holds";
+      return ja ? "条件を満たす間繰り返す" : "while the condition holds";
+    },
+    /** Beside a group's name, when it is tried again on failure: `n` tries in all. */
+    tries: (n: number) => (ja ? `うまくいかなければやり直す（${n} 回まで）` : `tried again on failure (up to ${n} times)`),
+    /** The frame round what a failure is caught from, when it has no name. */
+    guarded: ja ? "失敗に備える" : "Guarded",
+    zoomIn: ja ? "拡大" : "Zoom in",
+    zoomOut: ja ? "縮小" : "Zoom out",
+    fit: ja ? "全体を表示" : "Fit",
+    actual: ja ? "100% で表示" : "Actual size",
+    addHere: ja ? "ここに手順を追加" : "Add a step here",
     /** Where branches part to run at the same time; `limit` when only so many run at once. */
     together: (limit?: number) => (ja ? `同時に進める${limit ? `（${limit} つまで）` : ""}` : `At the same time${limit ? ` (up to ${limit})` : ""}`),
     /** After a loop's name, when its rounds run at the same time. */

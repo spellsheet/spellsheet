@@ -181,6 +181,17 @@ export const en: Dict = {
   newFlow: "New flow",
   newFlowPrompt: "Flow name",
   defaultFlowName: "New flow",
+  /** On the banner: what could not be done, then why. */
+  failed: (what: string, why: string) => `Could not ${what}: ${why}`,
+  /** What could not be done, for `failed`. */
+  couldNot: {
+    openFolder: "open the folder",
+    openRunner: "open the run window",
+    openLink: "open the link",
+    saveMasks: "save the blurring on the picture",
+    loadManual: "load the manual's pictures and blurring",
+    setBreakpoints: "apply the pause points to the running flow",
+  },
   duplicateFlowName: (name: string) =>
     `A flow named "${name}" already exists. Each flow's folder is named after it, so choose another name`,
   duplicate: "Duplicate",
@@ -685,6 +696,7 @@ export const en: Dict = {
   updateInstalling: "Updating. Writer opens again in a moment…",
   updateCheck: "Check again",
   updatesDisabled: "Development build: no automatic updates.",
+  updateNoInfo: "Could not read this version's details, so updates cannot be checked.",
   mcpSetup: "Register with other AI apps",
   mcpSetupHint: "Lets the AI you use, such as Cursor or Claude Code, build flows with SpellSheet. Once per AI; updates keep it working",
   mcpNoCli: "The SpellSheet command (spellsheet.exe) was not found. Reinstall SpellSheet.",
@@ -2283,6 +2295,7 @@ export const en: Dict = {
     elapsed: (time: string) => `${time} elapsed`,
     pause: "Pause",
     stop: "Stop",
+    notDone: (what: string) => `Could not ${what.toLowerCase()}. Stop it in Writer`,
     writer: "Back to Writer",
     close: "Close",
     waiting: "Waiting for you",

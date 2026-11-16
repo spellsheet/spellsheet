@@ -1,121 +1,76 @@
-// The flow as a chart to read, laid out from nothing but the flow itself.
+// The flow as a chart to look at, laid out from nothing but the flow itself.
 //
-// It answers what the sheet's sentences cannot at a glance: which app each
-// piece of work touches and in what order, where work repeats, where it
-// only sometimes runs, and where a failure goes. So it is drawn the way a
-// business flow is drawn on paper: a column for each app (and, of desktop
-// apps, for each window: they are the screens a person would see), time running down,
-// one row for each step, and one line through them.
+// It answers at a glance what the sheet's sentences cannot: where the work
+// parts and meets again, what repeats, where it can fail and what then, and
+// how the whole flow runs from start to end. So it is drawn the way a
+// flowchart is drawn on paper, top to bottom:
 //
-// - A step is a box on the line with its name in it, in the column of the
-//   app it works on, and an arrow runs from each box to the next. Work on
-//   nothing outside (a calculation, a log) is a quieter box where the line
-//   already is.
-// - What repeats, and what runs only for one answer, is a band across the
-//   columns it touches, named in words on the line where it starts. No lines
-//   go back or round: the band and its words say it.
-// - An if whose one side only stops (on to the next round, out of the loop,
-//   failed) is its question on the line with that way out under it; the
-//   other side is simply what follows on the line.
-// - What runs when something fails stands in a column of its own, beside
-//   the rows it covers.
-// - What runs at the same time runs side by side: the line parts at a bar,
-//   each branch goes down the column of its app (branches on the same app
-//   stand beside each other in it), and they meet at a bar again, since what
-//   follows waits for them all.
+// - It begins at 開始 and ends at 終了. A step is a box with its app's icon,
+//   and an arrow runs from each box to the next.
+// - A question (an if, a switch) is a pointed box, and the line parts under it:
+//   one way for each answer, side by side, each named on its line, meeting
+//   again under them. A question whose one answer only stops (fails, leaves a
+//   loop, goes on to the next round) sends that answer out to its right.
+// - What repeats is a tinted frame with an arrow going back up its left side.
+// - A group of steps is a frame with its name at the top; one that is tried
+//   again says so there.
+// - What runs when something fails stands to the right of what it covers,
+//   reached by a dashed vermilion arrow.
+// - What runs at the same time parts at a bar into branches side by side and
+//   meets at a bar again.
+// - When the flow is made of named groups (STEP 1, STEP 2…), each stands in a
+//   column of its own, left to right, so the whole flow fits the screen; the
+//   line goes on from the foot of one column to the head of the next.
 //
-// - In a step's box, under its name, stand the things the system does there that the
-//   sheet's sentences leave out (lib/systemFacts.ts): where it connects, the
-//   files it reads and writes, the secret it uses, how long it waits, and the
-//   values it takes from and gives to other steps.
-//
-// Pure geometry: what each row says is the component's (components/chart).
+// Pure geometry: what each shape says is the component's (components/chart),
+// which hands the words in only where their length decides a size.
 import type { Step, StepTypeDef } from "@spellsheet/schema";
 import { groupOf, isAppGroup } from "../lib/palette";
 import { BREAK, CASE, CONTINUE, FAIL, GROUP, IF, LOOP_TYPES, PARALLEL, SWITCH, TRY } from "../lib/stepTypes";
 
 export type Defs = ReadonlyMap<string, StepTypeDef>;
 
-/** A step's box: how wide it is, and how high its name is in it. */
-export const TILE_W = 248;
-export const TILE_H = 34;
-/** A tag (work on nothing outside), a band's name, a way out. */
-export const TAG_H = 26;
-/** The bar where the line parts into branches that run at the same time, and where they meet. */
-export const BAR_H = 3;
-/** A guard: its question, and under it the answer that leaves the line and where it goes. */
-export const GUARD_H = 58;
+/** A step's box: how wide it is, and how high a line of its name is. */
+export const BOX_W = 272;
+export const LINE_H = 19;
+/** Over and under the name in a box. */
+export const BOX_PAD = 9;
+/** A line of what the system does, under a step's name in its box, and the room under the last of them. */
+export const FACT_H = 17;
+export const FACT_PAD = 8;
+/** A question's box. */
+export const ASK_H = 44;
+const ASK_MAX = 380;
+/** A start, an end, a way out. */
+export const PILL_H = 30;
+/** A frame's name at its top. */
+export const HEAD_H = 34;
+/** The bar where branches that run at the same time part, and where they meet. */
+export const BAR_H = 4;
 /** Between two boxes: the arrow from one to the next. */
-export const ROW_GAP = 18;
-/** More room over a row the line crosses columns to reach. */
-export const CROSS = 8;
-/** Under the last row of a band, inside it. */
-const BAND_PAD = 8;
-/** Round a band, between it and the rows before and after. */
-const BAND_GAP = 8;
-/** Beside a band, for each band inside it. */
-export const NEST = 8;
+const GAP = 24;
+/** Between branches side by side. */
+const SIDE_GAP = 36;
+/** From a question down to where its line parts, and from there to the branches (room for the answer's name). */
+const PART = 14;
+const INTO = 38;
+/** Under the branches, to where they meet. */
+const MEET = 20;
+/** Inside a frame: beside what is in it, the room on the left for the arrow going back, and under it. */
+const FRAME_X = 18;
+const BACK_X = 34;
+const FRAME_B = 18;
+/** Between a frame and what runs when it fails, to its right. */
+const FAIL_GAP = 64;
+/** Between the columns of named groups, and over them for the line going on to the next. */
+export const STAGE_GAP = 80;
+export const STAGE_TOP = 28;
 
 const WAIT_UNTIL = "wait.until";
 const STOPS: ReadonlySet<string> = new Set([BREAK, CONTINUE, FAIL]);
 const stops = (step: Step | undefined): boolean => !!step && STOPS.has(step.type) && !step.disabled;
-
-export type BandKind = "loop" | "when" | "always" | "group" | "together";
-/** The column of what runs when something fails. */
-export const FAIL_LANE = "@fail";
-
-/**
- * `group`: the kind of app (a group of lib/palette). `name`: the window, for a desktop app's column.
- * `cols`: how many branches run side by side in it at the most.
- */
-export type Lane = { key: string; group: string; name?: string; steps: Step[]; cols: number };
-
-/** Where a row is: its column, and which of the places side by side in it (0 unless branches share the column). */
-type Place = { lane: number; off: number; y: number; h: number };
-
-export type Row = Place &
-  (
-    | /** A step: a tile in its app's column, or (`quiet`) a tag for work on nothing outside. */ { kind: "step"; step: Step; quiet: boolean }
-    | /** A break, continue or fail: where the line ends. */ { kind: "stop"; step: Step }
-    | /** An if whose `block` side only stops: the question, and that way out. */ { kind: "guard"; step: Step; block: string; stop: Step }
-    | /** Where a band starts: its name, on the line. `block` is the side of an if or the block of a try it is. */ {
-        kind: "head";
-        step: Step;
-        band: BandKind;
-        block: string;
-        child?: Step;
-      }
-    | /** Where branches that run at the same time part or meet: as wide as the rows `over` it reaches. */ { kind: "bar"; step: Step; over: number[] }
-  );
-
-export type Band = {
-  kind: BandKind;
-  step: Step;
-  /** The rows in it, from `first` up to (not including) `end` in `rows`: it reaches across the columns they are in. */
-  first: number;
-  end: number;
-  top: number;
-  bottom: number;
-  /** How many bands deep the deepest band inside it is. */
-  inner: number;
-};
-
-/** A try's rows, and the first row of what runs when they fail. */
-export type Bracket = { top: number; bottom: number; to: number };
-
-export type Chart = {
-  lanes: Lane[];
-  /** The index of the failure column in `lanes`, when there is one. */
-  failLane: number | null;
-  rows: Row[];
-  bands: Band[];
-  /** From a row to the row after it, by index in `rows`. */
-  links: { from: number; to: number }[];
-  brackets: Bracket[];
-  height: number;
-  /** The deepest nesting of bands. */
-  nest: number;
-};
+const live = (list: Step[] | undefined): Step[] => (list ?? []).filter((s) => !s.disabled);
+const blocksOf = (step: Step): [string, Step[]][] => Object.entries(step.blocks ?? {});
 
 /** The app a step works on (a group of lib/palette), or null for work on nothing outside. */
 export function appOf(step: Step, defs: Defs): string | null {
@@ -125,259 +80,746 @@ export function appOf(step: Step, defs: Defs): string | null {
   return isAppGroup(group) ? group : null;
 }
 
-const blocksOf = (step: Step): [string, Step[]][] => Object.entries(step.blocks ?? {});
-
-const WINDOWS = "windows";
-/** A column's key for a window of a desktop app. */
-const windowKey = (name: string) => `${WINDOWS}\t${name}`;
-const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
-const noExe = (file: string) => file.replace(/\.exe$/i, "");
-
-/**
- * The column of each step that works on a desktop app: the window it names by its title. A step that names
- * only the program (or starts it) is in the column of that program's first window; one that names nothing
- * (a part of the flow) stays in the window the step before it worked on.
- */
-function windowLanes(steps: Step[], defs: Defs): Map<Step, string> {
-  const all: Step[] = [];
-  const collect = (list: Step[]) => {
-    for (const step of list) {
-      if (appOf(step, defs) === WINDOWS) all.push(step);
-      for (const [, inner] of blocksOf(step)) collect(inner);
-    }
-  };
-  collect(steps);
-  const windowOf = (step: Step) => (((step.params ?? {}) as Record<string, unknown>).target as Record<string, unknown> | undefined)?.window as Record<string, unknown> | undefined;
-  const text = (v: unknown) => (typeof v === "string" && v && !v.includes("{{") ? v : null);
-  // Each program's first window with a title.
-  const home = new Map<string, string>();
-  for (const step of all) {
-    const w = windowOf(step);
-    const process = text(w?.process)?.toLowerCase();
-    const title = text(w?.title);
-    if (process && title && !home.has(process)) home.set(process, title);
-  }
-  const lanes = new Map<Step, string>();
-  let last: string | null = null;
-  for (const step of all) {
-    const w = windowOf(step);
-    const started = step.type === "desktop.launch" ? text(((step.params ?? {}) as Record<string, unknown>).path) : null;
-    const process = (text(w?.process) ?? (started ? baseName(started) : null))?.toLowerCase();
-    const name = text(w?.title) ?? (process ? (home.get(process) ?? noExe(process)) : text(w?.className));
-    const key: string = name ? windowKey(name) : (last ?? WINDOWS);
-    lanes.set(step, key);
-    last = key;
-  }
-  return lanes;
+/** How wide a line of words is, near enough to size a box round it: Japanese a full square, Latin about half. */
+export function textWidth(text: string, size: number): number {
+  let w = 0;
+  for (const ch of text) w += ch.charCodeAt(0) < 0x2e80 ? size * 0.58 : size;
+  return Math.ceil(w);
 }
 
-/** A line of what the system does, under a step's name in its box. */
-export const FACT_H = 17;
-/** Under the last of those lines, inside the box. */
-export const FACT_PAD = 9;
+export type FrameKind = "loop" | "group" | "try" | "always";
+export type PillKind = "start" | "end" | "fail" | "stop" | "caught" | "together";
 
-/** `facts`: how many lines of what the system does stand under a step's name (components/chart). */
-export function layoutChart(steps: Step[], defs: Defs, facts: (step: Step) => number = () => 0): Chart {
-  // The columns: each app, in the order the flow first touches it.
-  const windows = windowLanes(steps, defs);
-  const laneOf = (step: Step): string | null => windows.get(step) ?? appOf(step, defs);
-  const keys: string[] = [];
-  let fails = false;
-  const scan = (list: Step[]) => {
+export type Shape =
+  | /** A step. `minor`: a wait or check the sheet says in place without a number, drawn quieter. */ {
+      kind: "step";
+      step: Step;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      lines: number;
+      minor: boolean;
+    }
+  | /** A question: an if or a switch. */ {
+      kind: "ask";
+      step: Step;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }
+  | /** A start, an end, a way out (a stop step, when there is one), or the head of what runs on failure. */ {
+      kind: "pill";
+      pill: PillKind;
+      step?: Step;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }
+  | /** Where branches that run at the same time part or meet. */ {
+      kind: "bar";
+      step: Step;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    };
+
+export type Frame = {
+  kind: FrameKind;
+  step: Step;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+/** A line through `points`. `head`: an arrow's head at its end. `answer`: the answer it is, said on it at `at`. */
+export type Line = {
+  points: [number, number][];
+  head: boolean;
+  tone: "line" | "fail" | "back";
+  answer?: { text: string; at: [number, number] };
+  /** Where a step put on this line goes, and where on the line to offer it. */
+  insert?: { slot: Slot; at: [number, number] };
+};
+
+/** A place in the flow: `index` in the block `block` of the step `parentId` (null, null: the flow's own steps). */
+export type Slot = { parentId: string | null; block: string | null; index: number };
+
+export type Chart = {
+  shapes: Shape[];
+  frames: Frame[];
+  lines: Line[];
+  /** Small dots where lines meet. */
+  joins: [number, number][];
+  width: number;
+  height: number;
+  /** How many columns of named groups the flow stands in. */
+  stages: number;
+};
+
+/** What the chart says where its length decides a size (components/chart gives the real words). */
+export type Words = {
+  /** A step's name in its box. */
+  title: (step: Step) => string;
+  /** A question. */
+  question: (step: Step) => string;
+  /** A frame's name and what is said beside it (how it repeats, how often it is tried), as one line. */
+  frame: (step: Step, kind: FrameKind) => string;
+  /** A way out: a stop step's own words. */
+  stop: (step: Step) => string;
+  /** The name of one answer of a question: `block` then/else, or a case (`child`), or default. */
+  answer: (step: Step, block: string, child?: Step) => string;
+  /** What is said on a pill that is not a step. */
+  pill: (kind: "start" | "end" | "caught" | "together") => string;
+};
+
+export type Options = {
+  /** How many lines of what the system does stand under a step's name. */
+  facts?: (step: Step) => number;
+  /** Whether a step is drawn quieter (a wait or check the sheet gives no number). */
+  minor?: (step: Step) => boolean;
+  words?: Partial<Words>;
+};
+
+const plainWords: Words = {
+  title: (s) => (s.name ?? "").trim() || s.type,
+  question: (s) => (s.name ?? "").trim() || s.type,
+  frame: (s) => (s.name ?? "").trim() || s.type,
+  stop: (s) => (s.name ?? "").trim() || s.type,
+  answer: (_s, block, child) => (child ? (child.name ?? "").trim() || "case" : block),
+  pill: (k) => k,
+};
+
+/** A part of the chart, drawn round its own line: x = 0 is the line it comes in and goes out on, y = 0 its top. */
+type Block = {
+  /** How far it reaches left (negative) and right of its line. */
+  l: number;
+  r: number;
+  h: number;
+  /** Whether the flow goes on out of its foot (a stop ends it). */
+  open: boolean;
+  /** The answer said on the arrow out of its foot (a question whose other answer leaves to the right). */
+  out?: string;
+  /** The first and last step a sequence draws, for the places before and after them. */
+  first?: Step;
+  last?: Step;
+  shapes: Shape[];
+  frames: Frame[];
+  lines: Line[];
+  joins: [number, number][];
+};
+
+const empty = (): Block => ({
+  l: 0,
+  r: 0,
+  h: 0,
+  open: true,
+  shapes: [],
+  frames: [],
+  lines: [],
+  joins: [],
+});
+
+/** `b` into `into`, its line at `dx` and its top at `dy`. */
+function put(into: Block, b: Block, dx: number, dy: number) {
+  for (const s of b.shapes) into.shapes.push({ ...s, x: s.x + dx, y: s.y + dy });
+  for (const f of b.frames) into.frames.push({ ...f, x: f.x + dx, y: f.y + dy });
+  for (const l of b.lines) into.lines.push(moved(l, dx, dy));
+  for (const [x, y] of b.joins) into.joins.push([x + dx, y + dy]);
+  into.l = Math.min(into.l, b.l + dx);
+  into.r = Math.max(into.r, b.r + dx);
+}
+
+/** `l` moved by `dx`, `dy`. */
+function moved(l: Line, dx: number, dy: number): Line {
+  const by = ([x, y]: [number, number]): [number, number] => [x + dx, y + dy];
+  return {
+    ...l,
+    points: l.points.map(by),
+    ...(l.answer ? { answer: { text: l.answer.text, at: by(l.answer.at) } } : {}),
+    ...(l.insert ? { insert: { slot: l.insert.slot, at: by(l.insert.at) } } : {}),
+  };
+}
+
+/** A pill's width round its words. */
+const pillWidth = (text: string) => Math.min(320, textWidth(text, 12.5) + 58);
+
+export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): Chart {
+  const words: Words = { ...plainWords, ...options.words };
+  const factsOf = options.facts ?? (() => 0);
+  const minorOf = options.minor ?? (() => false);
+  // Where each step stands, for the places before and after it.
+  const where = new Map<Step, Slot>();
+  const place = (list: Step[], parentId: string | null, block: string | null) =>
+    list.forEach((step, index) => {
+      where.set(step, { parentId, block, index });
+      for (const [name, inner] of blocksOf(step)) place(inner, step.id ?? null, name);
+    });
+  place(steps, null, null);
+  const before = (step: Step | undefined): Slot | undefined => (step ? where.get(step) : undefined);
+  const after = (step: Step | undefined): Slot | undefined => {
+    const at = step ? where.get(step) : undefined;
+    return at && { ...at, index: at.index + 1 };
+  };
+  /** On a line going down from `y1` to `y2` at `x`: a step can be put there. */
+  const down = (slot: Slot | undefined, x: number, y1: number, y2: number) => (slot ? { insert: { slot, at: [x, (y1 + y2) / 2] as [number, number] } } : {});
+  void defs;
+
+  /** A box's name: on one line, or on two when it is long. */
+  const linesOf = (step: Step) => (textWidth(words.title(step), minorOf(step) ? 12.5 : 13.5) > BOX_W - 84 ? 2 : 1);
+
+  const pill = (kind: PillKind, text: string, step?: Step): Block => {
+    const w = pillWidth(text);
+    const b = empty();
+    b.shapes.push({
+      kind: "pill",
+      pill: kind,
+      ...(step ? { step } : {}),
+      x: -w / 2,
+      y: 0,
+      w,
+      h: PILL_H,
+    });
+    b.l = -w / 2;
+    b.r = w / 2;
+    b.h = PILL_H;
+    b.open = kind === "start" || kind === "caught";
+    return b;
+  };
+
+  const box = (step: Step): Block => {
+    const lines = linesOf(step);
+    const facts = factsOf(step);
+    const h = BOX_PAD * 2 + lines * LINE_H + (facts > 0 ? facts * FACT_H + FACT_PAD - 4 : 0);
+    const b = empty();
+    b.shapes.push({
+      kind: "step",
+      step,
+      x: -BOX_W / 2,
+      y: 0,
+      w: BOX_W,
+      h,
+      lines,
+      minor: minorOf(step),
+    });
+    b.l = -BOX_W / 2;
+    b.r = BOX_W / 2;
+    b.h = h;
+    return b;
+  };
+
+  /** One after another down the line. */
+  const seq = (list: Step[]): Block => {
+    const out = empty();
+    let y = 0;
+    let first = true;
+    let open = true;
+    let label: string | undefined;
     for (const step of list) {
       if (step.disabled) continue;
-      const app = laneOf(step);
-      if (app && !keys.includes(app)) keys.push(app);
-      for (const [name, inner] of blocksOf(step)) {
-        if (step.type === TRY && name === "catch") fails ||= inner.some((c) => !c.disabled);
-        else scan(inner);
+      const b = one(step);
+      if (!first) {
+        // Nothing runs after a stop; what stands there is still drawn, without a way into it.
+        if (open)
+          out.lines.push({
+            points: [[0, y], [0, y + GAP]],
+            head: true,
+            tone: "line",
+            ...(label ? { answer: { text: label, at: [0, y + GAP / 2] } } : down(before(step), 0, y, y + GAP)),
+          });
+        y += GAP;
       }
+      put(out, b, 0, y);
+      y += b.h;
+      // Once the flow has stopped it stays stopped, whatever stands after.
+      open = (first || open) && b.open;
+      label = b.out;
+      if (first) out.first = step;
+      out.last = step;
+      first = false;
     }
+    out.h = y;
+    out.open = open;
+    if (label) out.out = label;
+    return out;
   };
-  scan(steps);
-  if (keys.length === 0) keys.push("");
-  const lanes: Lane[] = keys.map((key) => {
-    const [group, name] = key.split("\t");
-    return { key, group: group!, ...(name ? { name } : {}), steps: [], cols: 1 };
-  });
-  const failLane = fails ? lanes.length : null;
-  if (fails) lanes.push({ key: FAIL_LANE, group: FAIL_LANE, steps: [], cols: 1 });
 
-  const rows: Row[] = [];
-  const bands: Band[] = [];
-  const links: { from: number; to: number }[] = [];
-  const brackets: Bracket[] = [];
-  let y = 0;
-  let lane = 0;
-  /** Inside what runs on failure: every row stays in that column. */
-  let failing = false;
-  /** The rows the line comes from into the next row. */
-  let prev: number[] = [];
-  let depth = 0;
-  let nest = 0;
+  /** A question, and the line parting under it into `ways`, side by side, meeting again under them. */
+  const ask = (step: Step, ways: { answer: string; list: Step[]; slot: Slot }[]): Block => {
+    const out = empty();
+    const w = Math.min(ASK_MAX, Math.max(BOX_W, textWidth(words.question(step), 13.5) + 64));
+    out.shapes.push({ kind: "ask", step, x: -w / 2, y: 0, w, h: ASK_H });
+    out.l = -w / 2;
+    out.r = w / 2;
+    // Each way: what is in it, or for an answer with nothing to do, just a line round (room for its name).
+    const blocks = ways.map((way) => {
+      const b = seq(way.list);
+      if (b.h === 0) {
+        const half = textWidth(way.answer, 11.5) / 2 + 14;
+        b.l = -half;
+        b.r = half;
+      }
+      return b;
+    });
+    // Side by side, the whole centred under the question.
+    const xs: number[] = [];
+    let at = 0;
+    blocks.forEach((b, i) => {
+      if (i > 0) at += SIDE_GAP;
+      xs.push(at - b.l);
+      at += b.r - b.l;
+    });
+    const shift = -at / 2;
+    for (let i = 0; i < xs.length; i++) xs[i]! += shift;
+    // Every way counts in the width, an empty one too (its name and its "+" stand on its line).
+    blocks.forEach((b, i) => {
+      out.l = Math.min(out.l, xs[i]! + b.l);
+      out.r = Math.max(out.r, xs[i]! + b.r + (b.h === 0 ? 24 : 0));
+    });
+    const part = ASK_H + PART;
+    const top = part + INTO;
+    const tallest = Math.max(0, ...blocks.map((b) => b.h));
+    const meet = top + tallest + MEET;
+    let open = false;
+    const meeting: number[] = [];
+    blocks.forEach((b, i) => {
+      const x = xs[i]!;
+      const way = ways[i]!;
+      const into: [number, number][] =
+        x === 0
+          ? [[0, ASK_H], [0, top]]
+          : [[0, ASK_H], [0, part], [x, part], [x, top]];
+      if (b.h === 0) {
+        // Nothing to do on this answer: the line goes straight on to where the ways meet.
+        out.lines.push({
+          points: [...into.slice(0, -1), [x, meet], ...(x === 0 ? [] : ([[0, meet]] as [number, number][]))],
+          head: false,
+          tone: "line",
+          answer: { text: way.answer, at: [x, part + INTO / 2] },
+          insert: { slot: way.slot, at: [x + textWidth(way.answer, 11.5) / 2 + 26, part + INTO / 2] },
+        });
+        open = true;
+        meeting.push(x);
+        return;
+      }
+      out.lines.push({
+        points: into,
+        head: true,
+        tone: "line",
+        answer: { text: way.answer, at: [x, part + INTO / 2] },
+        insert: { slot: before(b.first) ?? way.slot, at: [x + textWidth(way.answer, 11.5) / 2 + 26, part + INTO / 2] },
+      });
+      put(out, b, x, top);
+      if (b.open) {
+        open = true;
+        meeting.push(x);
+        const foot = top + b.h;
+        out.lines.push({
+          points:
+            x === 0
+              ? [[0, foot], [0, meet]]
+              : [[x, foot], [x, meet], [0, meet]],
+          head: false,
+          tone: "line",
+        });
+      }
+    });
+    if (meeting.length > 1) out.joins.push([0, meet]);
+    out.h = open ? meet : top + tallest;
+    out.open = open;
+    return out;
+  };
 
-  const put = (row: Row): number => {
-    const index = rows.length;
-    // Room for the line to cross to another column over this row (not from a bar: it reaches over the column itself).
-    if (prev.some((from) => rows[from]!.lane !== row.lane && rows[from]!.kind !== "bar")) {
-      y += CROSS;
-      row.y += CROSS;
+  /** A question whose one answer only stops: that answer goes out to the right, the other on down the line. */
+  const guard = (step: Step, leaves: string, stop: Step, stays: string, rest: Step[]): Block => {
+    const out = empty();
+    const w = Math.min(ASK_MAX, Math.max(BOX_W, textWidth(words.question(step), 13.5) + 64));
+    out.shapes.push({ kind: "ask", step, x: -w / 2, y: 0, w, h: ASK_H });
+    const text = words.stop(stop);
+    const pw = pillWidth(text);
+    const px = w / 2 + 56;
+    out.shapes.push({
+      kind: "pill",
+      pill: stop.type === FAIL ? "fail" : "stop",
+      step: stop,
+      x: px,
+      y: (ASK_H - PILL_H) / 2,
+      w: pw,
+      h: PILL_H,
+    });
+    out.lines.push({
+      points: [[w / 2, ASK_H / 2], [px, ASK_H / 2]],
+      head: true,
+      tone: stop.type === FAIL ? "fail" : "line",
+      answer: { text: leaves, at: [w / 2 + 28, ASK_H / 2] },
+    });
+    out.l = -w / 2;
+    out.r = px + pw;
+    const b = seq(rest);
+    if (b.h === 0) {
+      out.h = ASK_H;
+      out.out = stays;
+      return out;
     }
-    rows.push(row);
-    for (const from of prev) links.push({ from, to: index });
-    prev = [index];
-    y += row.h + ROW_GAP;
-    return index;
+    out.lines.push({
+      points: [[0, ASK_H], [0, ASK_H + GAP + 6]],
+      head: true,
+      tone: "line",
+      answer: { text: stays, at: [0, ASK_H + (GAP + 6) / 2] },
+      ...(before(b.first) ? { insert: { slot: before(b.first)!, at: [textWidth(stays, 11.5) / 2 + 26, ASK_H + (GAP + 6) / 2] as [number, number] } } : {}),
+    });
+    put(out, b, 0, ASK_H + GAP + 6);
+    out.h = ASK_H + GAP + 6 + b.h;
+    out.open = b.open;
+    if (b.out) out.out = b.out;
+    return out;
   };
-  /** The column the first row of `list` will be in. */
-  const firstLane = (list: Step[]): number => {
-    if (failing) return lane;
-    const step = list.find((s) => !s.disabled);
-    if (!step) return lane;
-    const app = laneOf(step);
-    if (app) return keys.indexOf(app);
+
+  /** A frame round `list`, its name at the top; a loop has an arrow going back up its left side. */
+  /** The place inside a step with nothing in it yet: its first part. */
+  const inside = (step: Step): Slot | undefined => {
+    const [first] = blocksOf(step);
+    return first && step.id ? { parentId: step.id, block: first[0], index: 0 } : undefined;
+  };
+  const frame = (kind: FrameKind, step: Step, list: Step[], into?: Slot): Block => {
+    const out = empty();
+    const body = seq(list);
+    const back = kind === "loop";
+    const name = textWidth(words.frame(step, kind), 12.5) + 60;
+    let l = Math.min(body.l, -BOX_W / 2) - (back ? BACK_X : FRAME_X);
+    let r = Math.max(body.r, BOX_W / 2) + FRAME_X;
+    if (r - l < name) {
+      const more = (name - (r - l)) / 2;
+      l -= more;
+      r += more;
+    }
+    const top = HEAD_H + 16;
+    let foot = top + body.h;
+    if (body.h > 0) {
+      out.lines.push({
+        points: [[0, HEAD_H], [0, top]],
+        head: true,
+        tone: "line",
+        // Beside the line: on it, the loop's arrow back comes in.
+        ...(before(body.first) ? { insert: { slot: before(body.first)!, at: [22, (HEAD_H + top) / 2] as [number, number] } } : {}),
+      });
+      put(out, body, 0, top);
+    } else if (into) {
+      // Nothing in it yet: a short line to put the first step on.
+      out.lines.push({ points: [[0, HEAD_H], [0, top]], head: false, tone: "line", ...down(into, 0, HEAD_H, top) });
+    }
+    if (back && body.h > 0) {
+      // Round again: from under the last step, up the left side, back in over the first.
+      const under = foot + 12;
+      const over = HEAD_H + 8;
+      out.lines.push({
+        points: [[0, foot], [0, under], [l + 14, under], [l + 14, over], [-10, over]],
+        head: true,
+        tone: "back",
+      });
+      foot = under;
+    }
+    const h = foot + FRAME_B;
+    if (body.open && body.h > 0)
+      out.lines.push({
+        points: [[0, foot - (back ? 12 : 0)], [0, h]],
+        head: false,
+        tone: "line",
+        ...(back ? {} : down(after(body.last), 0, foot, h)),
+      });
+    out.frames.unshift({ kind, step, x: l, y: 0, w: r - l, h });
+    out.l = Math.min(out.l, l);
+    out.r = Math.max(out.r, r);
+    out.h = h;
+    // A loop goes on when its rounds are done, whatever its last step does.
+    out.open = back || body.open;
+    return out;
+  };
+
+  /** What `step` covers, and to its right what runs when that fails. */
+  const tried = (step: Step, body: Step[], caught: Step[]): Block => {
+    const out = empty();
+    const covered = frame("try", step, body);
+    put(out, covered, 0, 0);
+    const head = pill("caught", words.pill("caught"));
+    const rest = seq(caught);
+    const after = rest.h > 0 ? GAP : 0;
+    const left = Math.min(head.l, rest.l);
+    const x = covered.r + FAIL_GAP - left;
+    put(out, head, x, 0);
+    out.lines.push({
+      points: [[covered.r, PILL_H / 2], [x + head.l, PILL_H / 2]],
+      head: true,
+      tone: "fail",
+    });
+    if (rest.h > 0) {
+      out.lines.push({
+        points: [[x, PILL_H], [x, PILL_H + after]],
+        head: true,
+        tone: "line",
+      });
+      put(out, rest, x, PILL_H + after);
+    }
+    const end = PILL_H + after + rest.h;
+    if (rest.open) {
+      // Handled: the flow goes on after the frame.
+      const meet = Math.max(covered.h, end) + MEET;
+      out.lines.push({
+        points: [[x, end], [x, meet], [0, meet]],
+        head: false,
+        tone: "line",
+      });
+      out.lines.push({
+        points: [[0, covered.h], [0, meet]],
+        head: false,
+        tone: "line",
+      });
+      out.joins.push([0, meet]);
+      out.h = meet;
+    } else {
+      // What follows stands under both, so the way on runs down past what ran on failure.
+      out.h = Math.max(covered.h, end);
+      if (covered.open && covered.h < end)
+        out.lines.push({
+          points: [[0, covered.h], [0, end]],
+          head: false,
+          tone: "line",
+        });
+    }
+    out.open = covered.open || rest.open;
+    return out;
+  };
+
+  const parallel = (step: Step, branches: Step[]): Block => {
+    const out = empty();
+    // Its own name when it has one, and it opens its settings like any step.
+    const head = pill("together", step.name || words.pill("together"), step);
+    // The name over the bar, then the branches side by side.
+    put(out, head, 0, 0);
+    const blocks = branches.map((b) => seq([b]));
+    const xs: number[] = [];
+    let at = 0;
+    blocks.forEach((b, i) => {
+      if (i > 0) at += SIDE_GAP;
+      xs.push(at - b.l);
+      at += b.r - b.l;
+    });
+    for (let i = 0; i < xs.length; i++) xs[i]! -= at / 2;
+    const barY = PILL_H + 14;
+    const span = (list: number[]) => [Math.min(0, ...list) - 24, Math.max(0, ...list) + 24] as const;
+    const [a, z] = span(xs);
+    out.lines.push({
+      points: [[0, PILL_H], [0, barY]],
+      head: false,
+      tone: "line",
+    });
+    out.shapes.push({ kind: "bar", step, x: a, y: barY, w: z - a, h: BAR_H });
+    const top = barY + BAR_H + GAP;
+    let tallest = 0;
+    blocks.forEach((b, i) => {
+      out.lines.push({
+        points: [
+          [xs[i]!, barY + BAR_H],
+          [xs[i]!, top],
+        ],
+        head: true,
+        tone: "line",
+      });
+      put(out, b, xs[i]!, top);
+      tallest = Math.max(tallest, b.h);
+    });
+    const meet = top + tallest + MEET;
+    blocks.forEach((b, i) => {
+      if (b.open)
+        out.lines.push({
+          points: [
+            [xs[i]!, top + b.h],
+            [xs[i]!, meet],
+          ],
+          head: false,
+          tone: "line",
+        });
+    });
+    out.shapes.push({ kind: "bar", step, x: a, y: meet, w: z - a, h: BAR_H });
+    out.l = Math.min(out.l, a);
+    out.r = Math.max(out.r, z);
+    out.h = meet + BAR_H;
+    return out;
+  };
+
+  /** One step, as what it is. */
+  const one = (step: Step): Block => {
     const blocks = step.blocks ?? {};
     if (step.type === IF) {
-      // A guard is in the column of what follows it.
-      const yes = blocks.then ?? [];
-      const no = blocks.else ?? [];
-      if (yes.length === 1 && stops(yes[0])) return firstLane(no);
-      if (no.length === 1 && stops(no[0])) return firstLane(yes);
+      const yes = live(blocks.then);
+      const no = live(blocks.else);
+      const only = (l: Step[]) => l.length === 1 && stops(l[0]);
+      if (only(yes) && !only(no)) return guard(step, words.answer(step, "then"), yes[0]!, words.answer(step, "else"), no);
+      if (only(no) && !only(yes)) return guard(step, words.answer(step, "else"), no[0]!, words.answer(step, "then"), yes);
+      return ask(step, [
+        { answer: words.answer(step, "then"), list: yes, slot: { parentId: step.id ?? null, block: "then", index: 0 } },
+        { answer: words.answer(step, "else"), list: no, slot: { parentId: step.id ?? null, block: "else", index: 0 } },
+      ]);
     }
-    const inner = blocksOf(step).find(([name, l]) => l.length > 0 && !(step.type === TRY && name === "catch"));
-    return inner ? firstLane(inner[1]) : lane;
-  };
-  const band = (kind: BandKind, step: Step, block: string, body: Step[], child?: Step) => {
-    y += BAND_GAP;
-    lane = firstLane(body);
-    const first = rows.length;
-    const head = put({ kind: "head", step, lane, off: 0, y, h: TAG_H, band: kind, block, ...(child ? { child } : {}) });
-    const top = rows[head]!.y + TAG_H / 2;
-    const mark = bands.length;
-    depth += 1;
-    nest = Math.max(nest, depth);
-    walk(body);
-    depth -= 1;
-    // Every way through it stopped: what follows is still reached when it does not run (or runs again).
-    if (prev.length === 0) prev = [head];
-    const bottom = y - ROW_GAP + BAND_PAD;
-    const inner = bands.slice(mark).reduce((n, b) => Math.max(n, b.inner + 1), 0);
-    bands.splice(mark, 0, { kind, step, first, end: rows.length, top, bottom, inner });
-    y = bottom + ROW_GAP + BAND_GAP;
-  };
-  const walk = (list: Step[]) => {
-    for (const step of list) {
-      if (step.disabled) continue;
-      const blocks = step.blocks ?? {};
-      if (step.type === TRY) {
-        const top = y;
-        walk(blocks.try ?? []);
-        const tried = prev;
-        const caught = blocks.catch ?? [];
-        if (caught.length > 0 && failLane !== null && !failing) {
-          const after = y;
-          const back = lane;
-          y = top;
-          lane = failLane;
-          prev = [];
-          failing = true;
-          const to = rows.length;
-          walk(caught);
-          failing = false;
-          // Nothing to go to when every step of the catch is switched off.
-          if (rows.length > to) brackets.push({ top, bottom: after - ROW_GAP, to });
-          prev = [...tried, ...prev];
-          y = Math.max(after, y);
-          lane = back;
-        } else if (caught.length > 0) {
-          walk(caught);
-        }
-        if ((blocks.finally ?? []).length > 0) band("always", step, "finally", blocks.finally!);
-        continue;
-      }
-      if (step.type === IF) {
-        const yes = blocks.then ?? [];
-        const no = blocks.else ?? [];
-        const only = (l: Step[]) => l.length === 1 && stops(l[0]);
-        const guard = only(yes) ? "then" : only(no) ? "else" : null;
-        if (guard) {
-          lane = firstLane(guard === "then" ? no : yes);
-          put({ kind: "guard", step, lane, off: 0, y, h: GUARD_H, block: guard, stop: (guard === "then" ? yes : no)[0]! });
-          walk(guard === "then" ? no : yes);
-        } else {
-          if (yes.length > 0) band("when", step, "then", yes);
-          if (no.length > 0) band("when", step, "else", no);
-        }
-        continue;
-      }
-      if (step.type === SWITCH) {
-        for (const child of blocks.cases ?? []) {
-          if (child.type === CASE && !child.disabled) band("when", step, "cases", blocksOf(child).flatMap(([, l]) => l), child);
-        }
-        if ((blocks.default ?? []).length > 0) band("when", step, "default", blocks.default!);
-        continue;
-      }
-      if (step.type === PARALLEL) {
-        const branches = (blocks.branches ?? []).filter((b) => !b.disabled);
-        y += BAND_GAP;
-        put({ kind: "head", step, lane, off: 0, y, h: TAG_H, band: "together", block: "branches" });
-        const fork = put({ kind: "bar", step, lane, off: 0, y, h: BAR_H, over: [] });
-        const top = y;
-        const home = lane;
-        const strands: [number, number][] = [];
-        const exits: number[] = [];
-        const firsts: number[] = [];
-        let bottom = y;
-        for (const branch of branches) {
-          y = top;
-          lane = firstLane([branch]);
-          prev = [fork];
-          const start = rows.length;
-          walk([branch]);
-          if (rows.length > start) {
-            strands.push([start, rows.length]);
-            firsts.push(start);
-          }
-          exits.push(...prev.filter((i) => i !== fork));
-          bottom = Math.max(bottom, y);
-        }
-        y = bottom;
-        lane = home;
-        prev = exits;
-        put({ kind: "bar", step, lane, off: 0, y, h: BAR_H, over: exits });
-        (rows[fork] as Extract<Row, { kind: "bar" }>).over = firsts;
-        // Branches in the same column stand beside each other in it.
-        lanes.forEach((l, index) => {
-          const here = strands.filter(([a, b]) => rows.slice(a, b).some((r) => r.lane === index));
-          if (here.length < 2) return;
-          l.cols = Math.max(l.cols, here.length);
-          here.forEach(([a, b], k) => {
-            for (const r of rows.slice(a, b)) if (r.lane === index) r.off += k;
-          });
+    if (step.type === SWITCH) {
+      const ways = live(blocks.cases)
+        .filter((c) => c.type === CASE)
+        .map((c) => ({
+          answer: words.answer(step, "cases", c),
+          list: blocksOf(c).flatMap(([, l]) => live(l)),
+          slot: { parentId: c.id ?? null, block: Object.keys(c.blocks ?? {})[0] ?? "body", index: 0 },
+        }));
+      ways.push({
+        answer: words.answer(step, "default"),
+        list: live(blocks.default),
+        slot: { parentId: step.id ?? null, block: "default", index: 0 },
+      });
+      return ask(step, ways);
+    }
+    if (step.type === TRY) {
+      const caught = live(blocks.catch);
+      const body = caught.length > 0 ? tried(step, live(blocks.try), caught) : seq(live(blocks.try));
+      const last = live(blocks.finally);
+      if (last.length === 0) return body;
+      const out = empty();
+      put(out, body, 0, 0);
+      const end = frame("always", step, last);
+      if (body.open)
+        out.lines.push({
+          points: [[0, body.h], [0, body.h + GAP]],
+          head: true,
+          tone: "line",
         });
-        continue;
-      }
-      if (LOOP_TYPES.has(step.type) || step.type === WAIT_UNTIL) {
-        band("loop", step, "body", blocksOf(step).flatMap(([, l]) => l));
-        continue;
-      }
-      const filled = blocksOf(step).filter(([, l]) => l.length > 0);
-      if (filled.length > 0) {
-        for (const [name, inner] of filled) band("group", step, step.type === GROUP ? "" : name, inner);
-        continue;
-      }
-      if (stops(step)) {
-        put({ kind: "stop", step, lane, off: 0, y, h: TAG_H });
-        prev = [];
-        continue;
-      }
-      const app = failing ? null : laneOf(step);
-      if (app) lane = keys.indexOf(app);
-      lanes[lane]!.steps.push(step);
-      const under = facts(step) * FACT_H;
-      put({ kind: "step", step, lane, off: 0, y, h: TILE_H + (under > 0 ? under + FACT_PAD : 0), quiet: !app && !failing });
+      put(out, end, 0, body.h + GAP);
+      out.h = body.h + GAP + end.h;
+      out.open = end.open;
+      return out;
     }
+    if (step.type === PARALLEL) return parallel(step, live(blocks.branches));
+    if (LOOP_TYPES.has(step.type) || step.type === WAIT_UNTIL)
+      return frame(
+        "loop",
+        step,
+        blocksOf(step).flatMap(([, l]) => live(l)),
+        inside(step),
+      );
+    const filled = blocksOf(step).filter(([, l]) => live(l).length > 0);
+    if (filled.length > 0 || step.type === GROUP)
+      return frame(
+        "group",
+        step,
+        filled.flatMap(([, l]) => live(l)),
+        inside(step),
+      );
+    if (stops(step)) {
+      const b = pill(step.type === FAIL ? "fail" : "stop", words.stop(step), step);
+      b.open = false;
+      return b;
+    }
+    return box(step);
   };
-  walk(steps);
-  return { lanes, failLane, rows, bands, links, brackets, height: Math.max(0, y - ROW_GAP), nest };
+
+  // The flow cut into columns at its named groups, when it has two or more of them.
+  const top = live(steps);
+  const named = top.filter((s) => s.type === GROUP).length >= 2;
+  const parts: Step[][] = [];
+  for (const step of top) {
+    const alone = named && step.type === GROUP;
+    if (alone || parts.length === 0 || (named && parts.at(-1)!.at(-1)?.type === GROUP)) parts.push([step]);
+    else parts.at(-1)!.push(step);
+  }
+  if (parts.length === 0) parts.push([]);
+
+  const columns = parts.map((list, i) => {
+    const out = empty();
+    let y = 0;
+    let open = true;
+    let label: string | undefined;
+    if (i === 0) {
+      put(out, pill("start", words.pill("start")), 0, 0);
+      y = PILL_H;
+    }
+    const body = seq(list);
+    if (body.h > 0) {
+      if (i === 0) {
+        out.lines.push({
+          points: [[0, y], [0, y + GAP]],
+          head: true,
+          tone: "line",
+          ...down(before(body.first), 0, y, y + GAP),
+        });
+        y += GAP;
+      }
+      put(out, body, 0, y);
+      y += body.h;
+      open = body.open;
+      label = body.out;
+    }
+    if (i === parts.length - 1 && open) {
+      out.lines.push({
+        points: [[0, y], [0, y + GAP]],
+        head: true,
+        tone: "line",
+        ...(label ? { answer: { text: label, at: [0, y + GAP / 2] } } : {}),
+        // At the end of the flow: after its last step.
+        insert: { slot: { parentId: null, block: null, index: steps.length }, at: [label ? textWidth(label, 11.5) / 2 + 26 : 0, y + GAP / 2] },
+      });
+      put(out, pill("end", words.pill("end")), 0, y + GAP);
+      y += GAP + PILL_H;
+    }
+    out.h = y;
+    out.open = open;
+    if (label) out.out = label;
+    return out;
+  });
+
+  const chart = empty();
+  const lead = columns.length > 1 ? STAGE_TOP : 0;
+  let at = 0;
+  const xs: number[] = [];
+  columns.forEach((c, i) => {
+    if (i > 0) at += STAGE_GAP;
+    xs.push(at - c.l);
+    at += c.r - c.l;
+  });
+  columns.forEach((c, i) => {
+    put(chart, c, xs[i]!, lead);
+    const next = columns[i + 1];
+    if (!next || !c.open) return;
+    // On from the foot of this column, up the gap beside it, into the head of the next.
+    const x = xs[i]!;
+    const gap = x + c.r + STAGE_GAP / 2;
+    const foot = lead + c.h;
+    chart.lines.push({
+      points: [
+        [x, foot],
+        [x, foot + 14],
+        [gap, foot + 14],
+        [gap, lead - 14],
+        [xs[i + 1]!, lead - 14],
+        [xs[i + 1]!, lead],
+      ],
+      head: true,
+      tone: "line",
+      ...(c.out ? { answer: { text: c.out, at: [x, foot + 7] } } : {}),
+      ...(before(parts[i + 1]![0]) ? { insert: { slot: before(parts[i + 1]![0])!, at: [gap, (foot + lead) / 2] as [number, number] } } : {}),
+    });
+  });
+  const height = Math.max(0, ...columns.map((c) => lead + c.h + (c.open ? 14 : 0)));
+  // Everything from x = 0.
+  const dx = -chart.l;
+  const result: Chart = {
+    shapes: chart.shapes.map((s) => ({ ...s, x: s.x + dx })),
+    frames: chart.frames.map((f) => ({ ...f, x: f.x + dx })),
+    lines: chart.lines.map((l) => moved(l, dx, 0)),
+    joins: chart.joins.map(([x, y]) => [x + dx, y] as [number, number]),
+    width: chart.r - chart.l,
+    height,
+    stages: columns.length,
+  };
+  return result;
 }

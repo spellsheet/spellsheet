@@ -125,7 +125,8 @@ const countSteps = (items: ManualItem[]): number =>
 /** A file, a site or a value the flow takes in or gives back, as a small card. */
 function Thing({ name, kind, out = false }: { name: string; kind: "file" | "site" | "value"; out?: boolean }) {
   const Icon = kind === "site" ? Globe : /\.(xlsx?|xlsm|csv)$/i.test(name) ? FileSpreadsheet : FileText;
-  const slash = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
+  // Only a file's name is split from its folder: a value's words may hold a slash ("A / B").
+  const slash = kind === "file" ? Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\")) : -1;
   return (
     <li className={`flex min-w-0 items-center gap-2.5 rounded-[4px] border bg-sheet px-2.5 py-2 ${out ? "border-[var(--color-role-output)] shadow-[inset_3px_0_0_var(--color-role-output)]" : "border-slate-300"}`}>
       {kind !== "value" && <Icon size={18} strokeWidth={1.5} aria-hidden="true" className={`shrink-0 ${Icon === FileSpreadsheet ? "text-moegi-600" : "text-slate-500"}`} />}
@@ -747,6 +748,7 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
   const run = useStudio(trailOf);
   const place = useStudio((s) => s.place);
   const approveAll = useStudio((s) => s.approveAll);
+  const fail = useStudio((s) => s.fail);
   const aiBusy = useFlowBusy();
   const todo = useRunGate((g) => (g.flowId === flow?.id ? g.todo : null));
   const subflows = useSubflows(flow);
@@ -768,7 +770,7 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
         setMasks(m.masks ?? {});
         setDrafts(m.drafts ?? {});
       })
-      .catch(() => {});
+      .catch((e) => live && fail(t.couldNot.loadManual, e));
     void api
       .listSchedules()
       .then((list) => live && setSchedules(list.schedules.filter((s) => s.flowId === flowId && s.enabled)))
@@ -959,9 +961,14 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
           mask={masks[masking.key]}
           onCancel={() => setMasking(null)}
           onSave={(mask) => {
+            const before = masks;
             const next = { ...masks, [masking.key]: mask };
             setMasks(next);
-            void manualApi.saveMasks(flow.id, next).catch(() => {});
+            // Not saved, the blurring would be gone the next time: put it back as it was and say so.
+            void manualApi.saveMasks(flow.id, next).catch((e) => {
+              setMasks(before);
+              fail(t.couldNot.saveMasks, e);
+            });
             setMasking(null);
           }}
         />

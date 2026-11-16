@@ -63,6 +63,7 @@ export function CloudPlaceDialog({
   const secrets = useStudio((s) => s.secrets);
   const loadSecrets = useStudio((s) => s.loadSecrets);
   const saveSecretAdding = useStudio((s) => s.saveSecretAdding);
+  const fail = useStudio((s) => s.fail);
   const installedNode = types.some((x) => x.type === service.download);
   const oauth = secrets.filter((s) => s.kind === "oauth");
   const [secret, setSecret] = useState(() => secretFor(oauth, service));
@@ -318,7 +319,7 @@ export function CloudPlaceDialog({
                     {words.appHint} {c.shared}{" "}
                     <button
                       type="button"
-                      onClick={() => void agent.openLink(service.console).catch(() => {})}
+                      onClick={() => void agent.openLink(service.console).catch((e) => fail(t.couldNot.openLink, e))}
                       className="inline-flex items-center gap-0.5 text-brand-500 hover:underline"
                     >
                       {c.openConsole}

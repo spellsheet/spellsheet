@@ -22,6 +22,8 @@ export function RunBand() {
   const [flow, setFlow] = useState<Flow | null>(null);
   const [defs, setDefs] = useState<Map<string, StepTypeDef>>(new Map());
   const [usual, setUsual] = useState<Record<string, number>>({});
+  // A pause or stop the run did not take: said on the band, not lost.
+  const [problem, setProblem] = useState<string | null>(null);
   const [state, setState] = useState<BandState>(emptyBand);
   const steps = flow?.steps ?? [];
   const stepsRef = useRef(steps);
@@ -100,7 +102,7 @@ export function RunBand() {
           </span>
         </span>
         <span className="pl-6 text-[11px] text-slate-500 tabular-nums">
-          {ended ? (t.band.result[state.status] ?? "") : state.status === "paused" ? t.band.paused : t.band.elapsed(clock(elapsed))}
+          {problem && !ended ? <span className="text-shu-600">{problem}</span> : ended ? (t.band.result[state.status] ?? "") : state.status === "paused" ? t.band.paused : t.band.elapsed(clock(elapsed))}
         </span>
       </div>
       {state.human ? (
@@ -117,10 +119,16 @@ export function RunBand() {
       <div className="flex shrink-0 items-center gap-0.5 border-l border-slate-200 pl-1.5">
         {!ended && run && (
           <>
-            <BandButton label={t.band.pause} onClick={() => void bandApi.pause(run.runId).catch(() => undefined)}>
+            <BandButton label={t.band.pause} onClick={() => {
+                setProblem(null);
+                void bandApi.pause(run.runId).catch(() => setProblem(t.band.notDone(t.band.pause)));
+              }}>
               <Pause size={15} />
             </BandButton>
-            <BandButton label={t.band.stop} onClick={() => void bandApi.stop(run.runId).catch(() => undefined)}>
+            <BandButton label={t.band.stop} onClick={() => {
+                setProblem(null);
+                void bandApi.stop(run.runId).catch(() => setProblem(t.band.notDone(t.band.stop)));
+              }}>
               <Square size={14} />
             </BandButton>
           </>
