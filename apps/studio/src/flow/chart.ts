@@ -88,7 +88,7 @@ export function textWidth(text: string, size: number): number {
 }
 
 export type FrameKind = "loop" | "group" | "try" | "always";
-export type PillKind = "start" | "end" | "fail" | "stop" | "caught";
+export type PillKind = "start" | "end" | "fail" | "stop" | "caught" | "together";
 
 export type Shape =
   | /** A step. `minor`: a wait or check the sheet says in place without a number, drawn quieter. */ {
@@ -375,6 +375,11 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
     });
     const shift = -at / 2;
     for (let i = 0; i < xs.length; i++) xs[i]! += shift;
+    // Every way counts in the width, an empty one too (its name and its "+" stand on its line).
+    blocks.forEach((b, i) => {
+      out.l = Math.min(out.l, xs[i]! + b.l);
+      out.r = Math.max(out.r, xs[i]! + b.r + (b.h === 0 ? 24 : 0));
+    });
     const part = ASK_H + PART;
     const top = part + INTO;
     const tallest = Math.max(0, ...blocks.map((b) => b.h));
@@ -591,7 +596,8 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
 
   const parallel = (step: Step, branches: Step[]): Block => {
     const out = empty();
-    const head = pill("stop", words.pill("together"));
+    // Its own name when it has one, and it opens its settings like any step.
+    const head = pill("together", step.name || words.pill("together"), step);
     // The name over the bar, then the branches side by side.
     put(out, head, 0, 0);
     const blocks = branches.map((b) => seq([b]));

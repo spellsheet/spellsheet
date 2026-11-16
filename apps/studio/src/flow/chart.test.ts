@@ -219,3 +219,22 @@ describe("layoutChart insert points", () => {
     for (const l of chart.lines) if (l.insert) for (const v of l.insert.at) expect(Number.isFinite(v)).toBe(true);
   });
 });
+
+describe("layoutChart bounds and names", () => {
+  it("counts answers with nothing to do in the chart's width", () => {
+    const cases = Array.from({ length: 8 }, () => s("control.case", { body: [] }));
+    const chart = layoutChart([s("control.switch", { cases, default: [] })], defs, { words: { answer: (_s, _b, child) => (child ? "Case 0" : "other") } });
+    for (const l of chart.lines) for (const [x] of l.points) {
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x).toBeLessThanOrEqual(chart.width + 0.5);
+    }
+    for (const l of chart.lines) if (l.answer) expect(l.answer.at[0]).toBeGreaterThan(0);
+  });
+
+  it("names the heading of what runs at the same time after the step, which it opens", () => {
+    const together = s("control.parallel", { branches: [s("browser.click"), s("excel.appendRows")] }, "両方へ送る");
+    const chart = layoutChart([together], defs);
+    const head = chart.shapes.find((x) => x.kind === "pill" && x.pill === "together");
+    expect(head && head.kind === "pill" ? head.step : undefined).toBe(together);
+  });
+});

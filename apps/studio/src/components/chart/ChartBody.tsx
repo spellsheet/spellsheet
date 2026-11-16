@@ -548,9 +548,9 @@ function ShapeView({
   if (shape.kind === "pill") {
     const { pill, step } = shape;
     const fail = pill === "fail" || pill === "caught";
-    const Icon = pill === "start" ? Play : pill === "end" ? Flag : pill === "caught" ? TriangleAlert : step ? (STOP_ICON[step.type] ?? Columns2) : Columns2;
+    const Icon = pill === "start" ? Play : pill === "end" ? Flag : pill === "caught" ? TriangleAlert : pill === "together" ? Columns2 : step ? (STOP_ICON[step.type] ?? Columns2) : Columns2;
     const text =
-      pill === "start" ? words.start : pill === "end" ? words.end : pill === "caught" ? words.failed : step ? (step.type === FAIL ? title(step, defs) : guardOutcome(step)) : words.together();
+      pill === "start" ? words.start : pill === "end" ? words.end : pill === "caught" ? words.failed : pill === "together" ? step?.name || words.together() : step ? (step.type === FAIL ? title(step, defs) : guardOutcome(step)) : words.together();
     const look =
       pill === "start" || pill === "end"
         ? "flow-chart-terminal border-transparent font-semibold"
@@ -564,6 +564,7 @@ function ShapeView({
           ? {
               type: "button" as const,
               onClick: () => onPick(step.id),
+              onContextMenu: onMenu(step.id),
               title: plain(sentence(step, defs.get(step.type))),
             }
           : {})}
