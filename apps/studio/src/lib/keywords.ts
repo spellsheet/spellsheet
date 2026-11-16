@@ -275,6 +275,7 @@ export function chartWords() {
     zoomOut: ja ? "縮小" : "Zoom out",
     fit: ja ? "全体を表示" : "Fit",
     actual: ja ? "100% で表示" : "Actual size",
+    addHere: ja ? "ここに手順を追加" : "Add a step here",
     /** Where branches part to run at the same time; `limit` when only so many run at once. */
     together: (limit?: number) => (ja ? `同時に進める${limit ? `（${limit} つまで）` : ""}` : `At the same time${limit ? ` (up to ${limit})` : ""}`),
     /** After a loop's name, when its rounds run at the same time. */

@@ -142,7 +142,12 @@ export type Line = {
   head: boolean;
   tone: "line" | "fail" | "back";
   answer?: { text: string; at: [number, number] };
+  /** Where a step put on this line goes, and where on the line to offer it. */
+  insert?: { slot: Slot; at: [number, number] };
 };
+
+/** A place in the flow: `index` in the block `block` of the step `parentId` (null, null: the flow's own steps). */
+export type Slot = { parentId: string | null; block: string | null; index: number };
 
 export type Chart = {
   shapes: Shape[];
@@ -199,6 +204,9 @@ type Block = {
   open: boolean;
   /** The answer said on the arrow out of its foot (a question whose other answer leaves to the right). */
   out?: string;
+  /** The first and last step a sequence draws, for the places before and after them. */
+  first?: Step;
+  last?: Step;
   shapes: Shape[];
   frames: Frame[];
   lines: Line[];
@@ -220,22 +228,21 @@ const empty = (): Block => ({
 function put(into: Block, b: Block, dx: number, dy: number) {
   for (const s of b.shapes) into.shapes.push({ ...s, x: s.x + dx, y: s.y + dy });
   for (const f of b.frames) into.frames.push({ ...f, x: f.x + dx, y: f.y + dy });
-  for (const l of b.lines)
-    into.lines.push({
-      ...l,
-      points: l.points.map(([x, y]) => [x + dx, y + dy] as [number, number]),
-      ...(l.answer
-        ? {
-            answer: {
-              text: l.answer.text,
-              at: [l.answer.at[0] + dx, l.answer.at[1] + dy] as [number, number],
-            },
-          }
-        : {}),
-    });
+  for (const l of b.lines) into.lines.push(moved(l, dx, dy));
   for (const [x, y] of b.joins) into.joins.push([x + dx, y + dy]);
   into.l = Math.min(into.l, b.l + dx);
   into.r = Math.max(into.r, b.r + dx);
+}
+
+/** `l` moved by `dx`, `dy`. */
+function moved(l: Line, dx: number, dy: number): Line {
+  const by = ([x, y]: [number, number]): [number, number] => [x + dx, y + dy];
+  return {
+    ...l,
+    points: l.points.map(by),
+    ...(l.answer ? { answer: { text: l.answer.text, at: by(l.answer.at) } } : {}),
+    ...(l.insert ? { insert: { slot: l.insert.slot, at: by(l.insert.at) } } : {}),
+  };
 }
 
 /** A pill's width round its words. */
@@ -245,6 +252,21 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
   const words: Words = { ...plainWords, ...options.words };
   const factsOf = options.facts ?? (() => 0);
   const minorOf = options.minor ?? (() => false);
+  // Where each step stands, for the places before and after it.
+  const where = new Map<Step, Slot>();
+  const place = (list: Step[], parentId: string | null, block: string | null) =>
+    list.forEach((step, index) => {
+      where.set(step, { parentId, block, index });
+      for (const [name, inner] of blocksOf(step)) place(inner, step.id ?? null, name);
+    });
+  place(steps, null, null);
+  const before = (step: Step | undefined): Slot | undefined => (step ? where.get(step) : undefined);
+  const after = (step: Step | undefined): Slot | undefined => {
+    const at = step ? where.get(step) : undefined;
+    return at && { ...at, index: at.index + 1 };
+  };
+  /** On a line going down from `y1` to `y2` at `x`: a step can be put there. */
+  const down = (slot: Slot | undefined, x: number, y1: number, y2: number) => (slot ? { insert: { slot, at: [x, (y1 + y2) / 2] as [number, number] } } : {});
   void defs;
 
   /** A box's name: on one line, or on two when it is long. */
@@ -307,7 +329,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
             points: [[0, y], [0, y + GAP]],
             head: true,
             tone: "line",
-            ...(label ? { answer: { text: label, at: [0, y + GAP / 2] } } : {}),
+            ...(label ? { answer: { text: label, at: [0, y + GAP / 2] } } : down(before(step), 0, y, y + GAP)),
           });
         y += GAP;
       }
@@ -316,6 +338,8 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
       // Once the flow has stopped it stays stopped, whatever stands after.
       open = (first || open) && b.open;
       label = b.out;
+      if (first) out.first = step;
+      out.last = step;
       first = false;
     }
     out.h = y;
@@ -325,7 +349,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
   };
 
   /** A question, and the line parting under it into `ways`, side by side, meeting again under them. */
-  const ask = (step: Step, ways: { answer: string; list: Step[] }[]): Block => {
+  const ask = (step: Step, ways: { answer: string; list: Step[]; slot: Slot }[]): Block => {
     const out = empty();
     const w = Math.min(ASK_MAX, Math.max(BOX_W, textWidth(words.question(step), 13.5) + 64));
     out.shapes.push({ kind: "ask", step, x: -w / 2, y: 0, w, h: ASK_H });
@@ -371,6 +395,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
           head: false,
           tone: "line",
           answer: { text: way.answer, at: [x, part + INTO / 2] },
+          insert: { slot: way.slot, at: [x + textWidth(way.answer, 11.5) / 2 + 26, part + INTO / 2] },
         });
         open = true;
         meeting.push(x);
@@ -381,6 +406,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
         head: true,
         tone: "line",
         answer: { text: way.answer, at: [x, part + INTO / 2] },
+        insert: { slot: before(b.first) ?? way.slot, at: [x + textWidth(way.answer, 11.5) / 2 + 26, part + INTO / 2] },
       });
       put(out, b, x, top);
       if (b.open) {
@@ -439,6 +465,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
       head: true,
       tone: "line",
       answer: { text: stays, at: [0, ASK_H + (GAP + 6) / 2] },
+      ...(before(b.first) ? { insert: { slot: before(b.first)!, at: [textWidth(stays, 11.5) / 2 + 26, ASK_H + (GAP + 6) / 2] as [number, number] } } : {}),
     });
     put(out, b, 0, ASK_H + GAP + 6);
     out.h = ASK_H + GAP + 6 + b.h;
@@ -448,7 +475,12 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
   };
 
   /** A frame round `list`, its name at the top; a loop has an arrow going back up its left side. */
-  const frame = (kind: FrameKind, step: Step, list: Step[]): Block => {
+  /** The place inside a step with nothing in it yet: its first part. */
+  const inside = (step: Step): Slot | undefined => {
+    const [first] = blocksOf(step);
+    return first && step.id ? { parentId: step.id, block: first[0], index: 0 } : undefined;
+  };
+  const frame = (kind: FrameKind, step: Step, list: Step[], into?: Slot): Block => {
     const out = empty();
     const body = seq(list);
     const back = kind === "loop";
@@ -467,8 +499,13 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
         points: [[0, HEAD_H], [0, top]],
         head: true,
         tone: "line",
+        // Beside the line: on it, the loop's arrow back comes in.
+        ...(before(body.first) ? { insert: { slot: before(body.first)!, at: [22, (HEAD_H + top) / 2] as [number, number] } } : {}),
       });
       put(out, body, 0, top);
+    } else if (into) {
+      // Nothing in it yet: a short line to put the first step on.
+      out.lines.push({ points: [[0, HEAD_H], [0, top]], head: false, tone: "line", ...down(into, 0, HEAD_H, top) });
     }
     if (back && body.h > 0) {
       // Round again: from under the last step, up the left side, back in over the first.
@@ -487,6 +524,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
         points: [[0, foot - (back ? 12 : 0)], [0, h]],
         head: false,
         tone: "line",
+        ...(back ? {} : down(after(body.last), 0, foot, h)),
       });
     out.frames.unshift({ kind, step, x: l, y: 0, w: r - l, h });
     out.l = Math.min(out.l, l);
@@ -617,8 +655,8 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
       if (only(yes) && !only(no)) return guard(step, words.answer(step, "then"), yes[0]!, words.answer(step, "else"), no);
       if (only(no) && !only(yes)) return guard(step, words.answer(step, "else"), no[0]!, words.answer(step, "then"), yes);
       return ask(step, [
-        { answer: words.answer(step, "then"), list: yes },
-        { answer: words.answer(step, "else"), list: no },
+        { answer: words.answer(step, "then"), list: yes, slot: { parentId: step.id ?? null, block: "then", index: 0 } },
+        { answer: words.answer(step, "else"), list: no, slot: { parentId: step.id ?? null, block: "else", index: 0 } },
       ]);
     }
     if (step.type === SWITCH) {
@@ -627,10 +665,12 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
         .map((c) => ({
           answer: words.answer(step, "cases", c),
           list: blocksOf(c).flatMap(([, l]) => live(l)),
+          slot: { parentId: c.id ?? null, block: Object.keys(c.blocks ?? {})[0] ?? "body", index: 0 },
         }));
       ways.push({
         answer: words.answer(step, "default"),
         list: live(blocks.default),
+        slot: { parentId: step.id ?? null, block: "default", index: 0 },
       });
       return ask(step, ways);
     }
@@ -659,6 +699,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
         "loop",
         step,
         blocksOf(step).flatMap(([, l]) => live(l)),
+        inside(step),
       );
     const filled = blocksOf(step).filter(([, l]) => live(l).length > 0);
     if (filled.length > 0 || step.type === GROUP)
@@ -666,6 +707,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
         "group",
         step,
         filled.flatMap(([, l]) => live(l)),
+        inside(step),
       );
     if (stops(step)) {
       const b = pill(step.type === FAIL ? "fail" : "stop", words.stop(step), step);
@@ -702,6 +744,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
           points: [[0, y], [0, y + GAP]],
           head: true,
           tone: "line",
+          ...down(before(body.first), 0, y, y + GAP),
         });
         y += GAP;
       }
@@ -716,6 +759,8 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
         head: true,
         tone: "line",
         ...(label ? { answer: { text: label, at: [0, y + GAP / 2] } } : {}),
+        // At the end of the flow: after its last step.
+        insert: { slot: { parentId: null, block: null, index: steps.length }, at: [label ? textWidth(label, 11.5) / 2 + 26 : 0, y + GAP / 2] },
       });
       put(out, pill("end", words.pill("end")), 0, y + GAP);
       y += GAP + PILL_H;
@@ -755,6 +800,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
       head: true,
       tone: "line",
       ...(c.out ? { answer: { text: c.out, at: [x, foot + 7] } } : {}),
+      ...(before(parts[i + 1]![0]) ? { insert: { slot: before(parts[i + 1]![0])!, at: [gap, (foot + lead) / 2] as [number, number] } } : {}),
     });
   });
   const height = Math.max(0, ...columns.map((c) => lead + c.h + (c.open ? 14 : 0)));
@@ -763,18 +809,7 @@ export function layoutChart(steps: Step[], defs: Defs, options: Options = {}): C
   const result: Chart = {
     shapes: chart.shapes.map((s) => ({ ...s, x: s.x + dx })),
     frames: chart.frames.map((f) => ({ ...f, x: f.x + dx })),
-    lines: chart.lines.map((l) => ({
-      ...l,
-      points: l.points.map(([x, y]) => [x + dx, y] as [number, number]),
-      ...(l.answer
-        ? {
-            answer: {
-              text: l.answer.text,
-              at: [l.answer.at[0] + dx, l.answer.at[1]] as [number, number],
-            },
-          }
-        : {}),
-    })),
+    lines: chart.lines.map((l) => moved(l, dx, 0)),
     joins: chart.joins.map(([x, y]) => [x + dx, y] as [number, number]),
     width: chart.r - chart.l,
     height,

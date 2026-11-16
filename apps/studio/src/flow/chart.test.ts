@@ -204,3 +204,18 @@ describe("layoutChart", () => {
     }
   });
 });
+
+describe("layoutChart insert points", () => {
+  it("offers a place to add a step on every arrow between steps, and inside each part", () => {
+    const a = s("browser.click");
+    const b = s("variable.set");
+    const loop = s("control.forEach", { body: [] });
+    const chart = layoutChart([a, b, loop], defs);
+    const slots = chart.lines.flatMap((l) => (l.insert ? [l.insert.slot] : []));
+    // Before the first, between each, and at the end of the flow.
+    for (const index of [0, 1, 2, 3]) expect(slots).toContainEqual({ parentId: null, block: null, index });
+    // Into the empty loop.
+    expect(slots).toContainEqual({ parentId: loop.id, block: "body", index: 0 });
+    for (const l of chart.lines) if (l.insert) for (const v of l.insert.at) expect(Number.isFinite(v)).toBe(true);
+  });
+});

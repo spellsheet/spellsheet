@@ -32,6 +32,10 @@ import {
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStudio } from "../../context";
+import { findStep, isActive } from "../../store";
+import { menuFor } from "../../lib/contextMenu";
+import { useFlowBusy } from "../../lib/useFlowBusy";
+import { useStepMenu } from "../menus";
 import type { RunState } from "../../store/run";
 import { type Chart, type Defs, FACT_H, type Frame, HEAD_H, type Line, LINE_H, BOX_PAD, layoutChart, appOf, type Shape, type Words } from "../../flow/chart";
 import { chartWords, guardOutcome } from "../../lib/keywords";
@@ -196,6 +200,13 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
   const stepTypes = useStudio((s) => s.stepTypes);
   const selection = useStudio((s) => s.selection);
   const goTo = useStudio((s) => s.goTo);
+  const setSelection = useStudio((s) => s.select);
+  const setPaletteOpen = useStudio((s) => s.setPaletteOpen);
+  const stepMenu = useStepMenu();
+  // Steps are put on the chart only while nothing else is changing the flow.
+  const running = useStudio((s) => isActive(s.run));
+  const aiBusy = useFlowBusy();
+  const editable = !running && !aiBusy;
   const defs: Defs = useMemo(() => new Map(stepTypes.map((d) => [d.type, d] as const)), [stepTypes]);
   // What the system does at each step, said in its box.
   const facts = useMemo(() => (flow ? systemFacts(flow, defs) : new Map<string, Fact[]>()), [flow, defs]);
@@ -274,6 +285,16 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
     goTo(id);
     onOpen?.();
   };
+  // Right-click on a step: the same menu as on the sheet.
+  const menu = (id: string | undefined) =>
+    id
+      ? menuFor(() => {
+          const step = findStep(flow.steps ?? [], id);
+          if (!step) return [];
+          setSelection({ kind: "step", stepId: id });
+          return stepMenu(step, { owner: flow.id });
+        })
+      : undefined;
 
   // The apps the flow works on, and what on them: a key over the chart.
   const apps = new Map<string, Step[]>();
@@ -346,7 +367,7 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
               }}
             >
               {chart.frames.map((f, i) => (
-                <FrameView key={i} frame={f} defs={defs} picked={picked} onPick={select} />
+                <FrameView key={i} frame={f} defs={defs} picked={picked} onPick={select} onMenu={menu} />
               ))}
               <svg className="pointer-events-none absolute inset-0 overflow-visible" width={chart.width} height={chart.height} aria-hidden="true">
                 {chart.lines.map((l, i) => {
@@ -373,6 +394,23 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
                   </span>
                 ) : null,
               )}
+              {editable &&
+                chart.lines.map((l, i) =>
+                  l.insert ? (
+                    // A place a step can be put: the "+" shows while the pointer is near it (or it has the keyboard).
+                    <span key={`add${i}`} className="group/add absolute z-30 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center" style={{ left: l.insert.at[0], top: l.insert.at[1] }}>
+                      <button
+                        type="button"
+                        title={words.addHere}
+                        aria-label={words.addHere}
+                        onClick={() => setPaletteOpen(true, l.insert!.slot)}
+                        className="flex size-5 items-center justify-center rounded-full border border-primary bg-sheet text-primary opacity-0 shadow-sm group-hover/add:opacity-100 hover:bg-primary hover:text-on-primary focus-visible:opacity-100"
+                      >
+                        <Plus size={12} strokeWidth={2.25} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ) : null,
+                )}
               {chart.shapes.map((s, i) => (
                 <ShapeView
                   key={i}
@@ -384,6 +422,7 @@ export function ChartBody({ numbers, run, onOpen }: { numbers?: ReadonlyMap<stri
                   numbers={numbers}
                   state={s.kind === "step" || s.kind === "ask" ? (s.step.id ? run?.steps[s.step.id] : undefined) : undefined}
                   onPick={select}
+                  onMenu={menu}
                 />
               ))}
             </div>
@@ -436,7 +475,9 @@ const FRAME_ICON: Record<Frame["kind"], LucideIcon> = {
   always: Flag,
 };
 
-function FrameView({ frame, defs, picked, onPick }: { frame: Frame; defs: Defs; picked: string | null; onPick: (id: string | undefined) => void }) {
+type Menu = (id: string | undefined) => ((e: React.MouseEvent) => void) | undefined;
+
+function FrameView({ frame, defs, picked, onPick, onMenu }: { frame: Frame; defs: Defs; picked: string | null; onPick: (id: string | undefined) => void; onMenu: Menu }) {
   const { kind, step } = frame;
   const Icon = FRAME_ICON[kind];
   const tries = kind === "group" ? step.retry?.maxAttempts : undefined;
@@ -448,6 +489,7 @@ function FrameView({ frame, defs, picked, onPick }: { frame: Frame; defs: Defs; 
         type="button"
         title={plain(sentence(step, defs.get(step.type)))}
         onClick={() => onPick(step.id)}
+        onContextMenu={onMenu(step.id)}
         className="flow-chart-frame-head flex w-full items-center gap-2 rounded-t-[10px] px-3 text-left"
         style={{ height: HEAD_H }}
       >
@@ -479,6 +521,7 @@ function ShapeView({
   numbers,
   state,
   onPick,
+  onMenu,
 }: {
   shape: Shape;
   defs: Defs;
@@ -489,6 +532,7 @@ function ShapeView({
   numbers?: ReadonlyMap<string, number>;
   state?: string;
   onPick: (id: string | undefined) => void;
+  onMenu: Menu;
 }) {
   const words = chartWords();
   const at = {
@@ -541,7 +585,7 @@ function ShapeView({
     const h = shape.h;
     const tip2 = 16;
     return (
-      <button type="button" title={tip} onClick={() => onPick(step.id)} style={at} className="flow-chart-ask group absolute z-10 flex items-center justify-center px-6 text-center">
+      <button type="button" title={tip} onClick={() => onPick(step.id)} onContextMenu={onMenu(step.id)} style={at} className="flow-chart-ask group absolute z-10 flex items-center justify-center px-6 text-center">
         {/* A question: a box pointed at both ends. */}
         <svg className="absolute inset-0 overflow-visible" width={w} height={h} aria-hidden="true">
           <polygon
@@ -567,6 +611,7 @@ function ShapeView({
       type="button"
       title={tip}
       onClick={() => onPick(step.id)}
+      onContextMenu={onMenu(step.id)}
       style={at}
       className={`flow-chart-node absolute z-10 block rounded-[8px] border text-left ${edge || "border-slate-300"} ${minor ? "flow-chart-node-minor" : ""}`}
     >
