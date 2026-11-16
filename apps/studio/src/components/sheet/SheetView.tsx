@@ -125,7 +125,8 @@ const countSteps = (items: ManualItem[]): number =>
 /** A file, a site or a value the flow takes in or gives back, as a small card. */
 function Thing({ name, kind, out = false }: { name: string; kind: "file" | "site" | "value"; out?: boolean }) {
   const Icon = kind === "site" ? Globe : /\.(xlsx?|xlsm|csv)$/i.test(name) ? FileSpreadsheet : FileText;
-  const slash = Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"));
+  // Only a file's name is split from its folder: a value's words may hold a slash ("A / B").
+  const slash = kind === "file" ? Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\")) : -1;
   return (
     <li className={`flex min-w-0 items-center gap-2.5 rounded-[4px] border bg-sheet px-2.5 py-2 ${out ? "border-[var(--color-role-output)] shadow-[inset_3px_0_0_var(--color-role-output)]" : "border-slate-300"}`}>
       {kind !== "value" && <Icon size={18} strokeWidth={1.5} aria-hidden="true" className={`shrink-0 ${Icon === FileSpreadsheet ? "text-moegi-600" : "text-slate-500"}`} />}
