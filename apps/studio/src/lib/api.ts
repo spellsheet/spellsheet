@@ -90,7 +90,10 @@ export type Schedule = {
   inputs?: Record<string, unknown>;
 };
 
-export type ScheduleView = Schedule & { flowName: string | null; published: boolean; usesScreen: boolean; /** When it fires in the coming week (RFC 3339). */ week?: string[] };
+export type ScheduleView = Schedule & { flowName: string | null; published: boolean; usesScreen: boolean; /** When it fires in the coming week, day by day. */ week?: DayRuns[] };
+
+/** One day of a schedule's coming runs: how many, and the first few times (RFC 3339). */
+export type DayRuns = { date: string; count: number; times: string[] };
 
 /** When this PC locks its screen by itself after no input. */
 export type ScreenLock = { afterSecs: number; by: "screenSaver" | "inactivityLimit" };

@@ -41,7 +41,7 @@ pub struct ScheduleView {
     /// which stop while the screen is locked.
     pub uses_screen: bool,
     /// When it fires in the coming week, for the week drawn above the list.
-    pub week: Vec<String>,
+    pub week: Vec<spellsheet_agent::schedule::DayRuns>,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,7 +87,8 @@ fn flows_run_by(svc: &FlowService, id: &FlowId) -> Vec<Flow> {
 }
 
 /// Times of one schedule drawn in the week: an every-few-minutes one is said as a count past this.
-const WEEK_TIMES: usize = 200;
+/// Times shown on a day of the week; the rest are counted.
+const WEEK_TIMES: usize = 3;
 
 fn list(state: &AppState) -> CmdResult<ScheduleList> {
     let svc = &state.service;

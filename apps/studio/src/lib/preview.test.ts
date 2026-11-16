@@ -65,6 +65,15 @@ describe("loadPreview", () => {
     expect((await loadPreview("f1", "bad.csv")).preview).toEqual({ kind: "unreadable", message: "denied" });
   });
 
+  it("reads again when asked for a fresh read, and keeps that one", async () => {
+    let reads = 0;
+    setPreviewReader(async () => (++reads === 1 ? { kind: "missing" } : { kind: "table", columns: ["a"], rows: [["1"]], more: false }));
+    expect((await loadPreview("f1", "output/new.csv")).preview.kind).toBe("missing");
+    expect((await loadPreview("f1", "output/new.csv", undefined, true)).preview.kind).toBe("table");
+    expect((await loadPreview("f1", "output/new.csv")).preview.kind).toBe("table");
+    expect(reads).toBe(2);
+  });
+
   it("keeps the shrunk picture, not the file's bytes", async () => {
     setPreviewReader(async () => ({ kind: "image", mime: "image/png", data: PNG, bytes: 120 }));
     const loaded = await loadPreview("f1", "templates/ok.png");

@@ -874,7 +874,8 @@ function weekDays(now = new Date()): Date[] {
   return Array.from({ length: 7 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
 }
 
-const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+/** The local day as the schedules give it: "2026-11-17". */
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
 /**
@@ -897,8 +898,8 @@ function Week({ schedules, stopped, onOpen }: { schedules: ScheduleView[]; stopp
       <div className="grid grid-cols-7 divide-x divide-slate-100">
         {days.map((day, i) => {
           const items = timed.flatMap((item) => {
-            const times = (item.week ?? []).map((w) => new Date(w)).filter((d) => sameDay(d, day));
-            return times.length === 0 ? [] : [{ item, times }];
+            const runs = (item.week ?? []).find((w) => w.date === isoDay(day));
+            return runs ? [{ item, count: runs.count, times: runs.times.map((w) => new Date(w)) }] : [];
           });
           items.sort((a, b) => a.times[0]!.getTime() - b.times[0]!.getTime());
           const weekend = day.getDay() === 0 || day.getDay() === 6;
@@ -909,7 +910,7 @@ function Week({ schedules, stopped, onOpen }: { schedules: ScheduleView[]; stopp
                 <div className="px-0.5 text-[11px] text-slate-300">{r.weekNone}</div>
               ) : (
                 <ul className="space-y-1">
-                  {items.map(({ item, times }) => (
+                  {items.map(({ item, count, times }) => (
                     <li key={item.id}>
                       <button
                         type="button"
@@ -917,7 +918,7 @@ function Week({ schedules, stopped, onOpen }: { schedules: ScheduleView[]; stopp
                         title={`${item.name || item.flowName}（${describeWhen(item.when)}）`}
                         className={`block w-full rounded-[3px] border-l-[3px] px-1.5 py-0.5 text-left text-[11.5px] leading-tight hover:bg-slate-100 ${stopped ? "border-slate-300 bg-slate-50 text-slate-500" : "border-brand-500 bg-brand-50/60 text-ink"}`}
                       >
-                        <span className="block tabular-nums text-slate-500">{times.length > 3 ? `${hhmm(times[0]!)}〜 ${r.weekTimes(times.length)}` : times.map(hhmm).join(" ")}</span>
+                        <span className="block tabular-nums text-slate-500">{count > 3 ? `${hhmm(times[0]!)}〜 ${r.weekTimes(count)}` : times.map(hhmm).join(" ")}</span>
                         <span className="block truncate font-medium">{item.name || item.flowName}</span>
                       </button>
                     </li>

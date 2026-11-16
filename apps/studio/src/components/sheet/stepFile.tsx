@@ -6,7 +6,7 @@
 // run) shows nothing.
 import type { Flow, Step } from "@spellsheet/schema";
 import { FileSpreadsheet, FileText, ImageIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type FilePreview, filePath, loadPreview, type Loaded } from "../../lib/preview";
 import { DocumentView } from "../DocumentView";
 
@@ -54,9 +54,11 @@ const SHOWN: FilePreview["kind"][] = ["table", "document", "image"];
 /** The file, small, under its name. Nothing while it is read or when it cannot be shown. */
 export function StepFile({ flowId, path, sheet, stamp }: { flowId: string; path: string; sheet?: string; stamp: string }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  // The stamp it first showed with: a later one means a run wrote the file since, so the kept read is old.
+  const first = useRef(stamp);
   useEffect(() => {
     let live = true;
-    void loadPreview(flowId, path, sheet).then((l) => live && setLoaded(l));
+    void loadPreview(flowId, path, sheet, stamp !== first.current).then((l) => live && setLoaded(l));
     return () => {
       live = false;
     };

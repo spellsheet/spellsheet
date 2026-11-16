@@ -148,10 +148,11 @@ export function setPreviewReader(read: PreviewReader) {
   kept.clear();
 }
 
-export function loadPreview(flowId: string | undefined, path: string, sheet?: string): Promise<Loaded> {
+/** `fresh`: read the file again even when a recent read is kept (a run has just written it). */
+export function loadPreview(flowId: string | undefined, path: string, sheet?: string, fresh = false): Promise<Loaded> {
   const key = `${flowId ?? ""}|${path}|${sheet ?? ""}`;
   const hit = kept.get(key);
-  if (hit && Date.now() - hit.at < FRESH_MS) {
+  if (hit && !fresh && Date.now() - hit.at < FRESH_MS) {
     // Most recently used last.
     kept.delete(key);
     kept.set(key, hit);
