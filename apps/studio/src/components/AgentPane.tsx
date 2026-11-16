@@ -78,8 +78,9 @@ export function AgentPane({ width }: { width: number }) {
     setDraftOf(id, () => "");
     if (!(await sendIn(id, text, ref, context))) setDraftOf(id, (now) => now || text);
   };
-  // Only the last reply's card can still be answered, and not while the AI works.
-  const canChoose = !busy && !blockedElsewhere && available;
+  // Only the last reply's card can still be answered. While the AI still works
+  // after asking, the answer waits for its next step like anything written.
+  const canChoose = !blockedElsewhere && available;
   const CARD = "rounded-[8px] bg-sheet shadow-[0_0_0_1px_var(--color-slate-300),0_8px_24px_-8px_rgb(16_24_40/0.25)]";
   // Closed, the column draws nothing (what was being written is kept with the conversation).
   if (!open || width === 0) return null;

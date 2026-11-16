@@ -8,7 +8,7 @@ import { useStudio } from "../context";
 import { type AgentStatus, api, type Schedule, type ScheduleList, type ScheduleView, type ScheduleWhen, type ScreenLock } from "../lib/api";
 import { agentErrorText } from "../lib/agentError";
 import { type MenuSpec, menuFor } from "../lib/contextMenu";
-import { t } from "../lib/i18n";
+import { locale, t } from "../lib/i18n";
 import { blankWhen, DAYS, describeWhen, KINDS, normalizeDays, shortTime, type WhenKind, whenProblem } from "../lib/schedule";
 import { BulkButton, ClearFilters, type Column, DataTable, FacetFilter, RowMenuButton, SearchBox, SelectionBar, StatusBadge, Switch, type Tone, toneDot, useTableView, ViewMenu } from "./DataTable";
 
@@ -588,6 +588,7 @@ export function RunsPage() {
     // The agent reads the file within a second; then the next times show.
     setTimeout(() => void poll(), 1500);
   };
+  const noFlows = useStudio((s) => s.summaries.length === 0);
   const blank: Schedule = { id: "", name: "", flowId: openId ?? "", enabled: true, when: blankWhen("daily") };
   const schedules = list?.schedules ?? [];
   const [query, setQuery] = useState("");
@@ -669,8 +670,10 @@ export function RunsPage() {
           <button
             type="button"
             hidden={!!editing}
+            disabled={noFlows}
+            title={noFlows ? r.noFlows : undefined}
             onClick={() => setEditing(blank)}
-            className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary hover:bg-primary-hover"
+            className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-primary px-3 text-[13px] font-medium text-on-primary enabled:hover:bg-primary-hover disabled:opacity-50"
           >
             ＋ {r.add}
           </button>
@@ -687,11 +690,13 @@ export function RunsPage() {
               <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-300 px-6 py-10 text-center text-[13px] text-slate-600">
                 <CalendarClock size={22} strokeWidth={1.5} className="text-slate-400" aria-hidden="true" />
                 {r.none}
+                {noFlows && <span className="max-w-[460px] text-[12.5px] text-slate-500">{r.noFlows}</span>}
               </div>
             )
           ) : (
             <>
               {/* The screen-lock warning is the same for every row it applies to: said once, marked on the rows. */}
+              <Week schedules={schedules} stopped={status === null} onOpen={(item) => setEditing(plain(item))} />
               {lockNote && (
                 <p className="mb-3 flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50/60 px-3 py-2 text-[12px] leading-5 text-amber-700">
                   <TriangleAlert size={14} strokeWidth={1.75} className="mt-[3px] shrink-0 text-amber-600" aria-hidden="true" />
@@ -726,10 +731,11 @@ export function RunsPage() {
   );
 }
 
-type State = "running" | "on" | "blocked" | "off";
-const STATES: State[] = ["running", "on", "blocked", "off"];
-const STATE_TONE: Record<State, Tone> = { running: "blue", on: "green", blocked: "red", off: "slate" };
-const stateLabel = (s: State) => (s === "running" ? t.runs.running : s === "on" ? t.runs.stateOn : s === "blocked" ? t.runs.stateBlocked : t.runs.stateOff);
+type State = "running" | "on" | "stopped" | "blocked" | "off";
+const STATES: State[] = ["running", "on", "stopped", "blocked", "off"];
+const STATE_TONE: Record<State, Tone> = { running: "blue", on: "green", stopped: "amber", blocked: "red", off: "slate" };
+const stateLabel = (s: State) =>
+  s === "running" ? t.runs.running : s === "on" ? t.runs.stateOn : s === "stopped" ? t.runs.stateStopped : s === "blocked" ? t.runs.stateBlocked : t.runs.stateOff;
 
 /** What a row says besides its schedule: the agent's times and what keeps it from running. */
 function factsOf(item: ScheduleView, status: AgentStatus | null | undefined, screenLock: ScreenLock | undefined) {
@@ -737,7 +743,8 @@ function factsOf(item: ScheduleView, status: AgentStatus | null | undefined, scr
   const live = status?.schedules.find((s) => s.id === item.id);
   const running = !!status?.running.some((run) => run.scheduleId === item.id);
   const warn = !item.flowName ? r.flowMissing : !item.published ? r.notPublished : null;
-  const state: State = !item.enabled ? "off" : warn ? "blocked" : running ? "running" : "on";
+  // On, but nothing fires while the automatic runs are stopped (status null; undefined: not asked yet).
+  const state: State = !item.enabled ? "off" : warn ? "blocked" : running ? "running" : status === null ? "stopped" : "on";
   // Said before the night it stops (docs/design/locked-runs.md).
   const locks =
     item.enabled && item.usesScreen && screenLock ? r.locksScreen(Math.max(1, Math.round(screenLock.afterSecs / 60)), screenLock.by === "inactivityLimit") : null;
@@ -831,7 +838,7 @@ function useColumns(facts: (item: ScheduleView) => ReturnType<typeof factsOf>, o
       },
       cell: (item) => {
         const { state, warn } = facts(item);
-        return <StatusBadge tone={STATE_TONE[state]} label={stateLabel(state)} title={warn ?? undefined} />;
+        return <StatusBadge tone={STATE_TONE[state]} label={stateLabel(state)} title={warn ?? (state === "stopped" ? t.runs.stoppedTitle : undefined)} />;
       },
     },
     {
@@ -859,4 +866,68 @@ function useColumns(facts: (item: ScheduleView) => ReturnType<typeof factsOf>, o
       cell: (item) => <Switch checked={item.enabled} label={item.enabled ? r.disable : r.enable} onChange={(on) => onEnabled(item, on)} />,
     },
   ];
+}
+
+/** Days from today, at midnight here. */
+function weekDays(now = new Date()): Date[] {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Array.from({ length: 7 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+}
+
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+/**
+ * The coming week as seven columns, each schedule where and when it fires:
+ * when things run at a glance, before reading the rows. A schedule firing
+ * many times a day (every few minutes) is said as a count.
+ */
+function Week({ schedules, stopped, onOpen }: { schedules: ScheduleView[]; stopped: boolean; onOpen: (item: ScheduleView) => void }) {
+  const r = t.runs;
+  const days = weekDays();
+  const timed = schedules.filter((s) => (s.week?.length ?? 0) > 0);
+  if (timed.length === 0) return null;
+  const fmt = new Intl.DateTimeFormat(locale === "ja" ? "ja-JP" : "en-US", { month: "numeric", day: "numeric", weekday: "short" });
+  return (
+    <section className="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-sheet" aria-label={r.weekTitle} data-week>
+      <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-1.5 text-[12.5px]">
+        <b>{r.weekTitle}</b>
+        {stopped && <span className="text-amber-700">{r.weekStopped}</span>}
+      </div>
+      <div className="grid grid-cols-7 divide-x divide-slate-100">
+        {days.map((day, i) => {
+          const items = timed.flatMap((item) => {
+            const times = (item.week ?? []).map((w) => new Date(w)).filter((d) => sameDay(d, day));
+            return times.length === 0 ? [] : [{ item, times }];
+          });
+          items.sort((a, b) => a.times[0]!.getTime() - b.times[0]!.getTime());
+          const weekend = day.getDay() === 0 || day.getDay() === 6;
+          return (
+            <div key={i} className={`min-h-[84px] min-w-0 px-1.5 py-1.5 ${weekend ? "bg-paper" : ""}`}>
+              <div className={`mb-1 px-0.5 text-[11.5px] ${i === 0 ? "font-bold text-brand-600" : "text-slate-500"}`}>{i === 0 ? `${r.weekToday} ${fmt.format(day)}` : fmt.format(day)}</div>
+              {items.length === 0 ? (
+                <div className="px-0.5 text-[11px] text-slate-300">{r.weekNone}</div>
+              ) : (
+                <ul className="space-y-1">
+                  {items.map(({ item, times }) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        onClick={() => onOpen(item)}
+                        title={`${item.name || item.flowName}（${describeWhen(item.when)}）`}
+                        className={`block w-full rounded-[3px] border-l-[3px] px-1.5 py-0.5 text-left text-[11.5px] leading-tight hover:bg-slate-100 ${stopped ? "border-slate-300 bg-slate-50 text-slate-500" : "border-brand-500 bg-brand-50/60 text-ink"}`}
+                      >
+                        <span className="block tabular-nums text-slate-500">{times.length > 3 ? `${hhmm(times[0]!)}〜 ${r.weekTimes(times.length)}` : times.map(hhmm).join(" ")}</span>
+                        <span className="block truncate font-medium">{item.name || item.flowName}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }

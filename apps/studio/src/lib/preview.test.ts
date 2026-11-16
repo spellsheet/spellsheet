@@ -14,7 +14,8 @@ describe("previewSource", () => {
   it("leaves paths it cannot read alone", () => {
     expect(filePath("output/{{ name }}.png")).toBeNull();
     expect(filePath("https://example.com/a.png")).toBeNull();
-    expect(filePath("archive.zip")).toBeNull();
+    expect(filePath("setup.exe")).toBeNull();
+    expect(filePath("archive.zip")).toBe("archive.zip");
     expect(filePath("a.png\nb.png")).toBeNull();
     expect(previewSource(42)).toBeNull();
     expect(previewSource("hello")).toBeNull();

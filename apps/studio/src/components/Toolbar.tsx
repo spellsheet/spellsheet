@@ -1,4 +1,4 @@
-import { ArrowLeft, CircleCheck, CircleDashed, Ellipsis, FolderOutput, History, Locate, LocateFixed, Pause, Redo2, Files, Send, Settings2, StepForward, Undo2, type LucideIcon } from "lucide-react";
+import { ArrowLeft, CircleCheck, CircleDashed, Ellipsis, FolderOutput, History, Locate, LocateFixed, Pause, Redo2, Files, Send, Settings2, StepForward, TriangleAlert, Undo2, type LucideIcon } from "lucide-react";
 import { openMenu } from "../lib/contextMenu";
 import { FlowSwitch } from "./FlowSwitch";
 
@@ -122,7 +122,7 @@ export function FlowTitle() {
         }`}
       >
         {published ? <CircleCheck size={13} strokeWidth={1.75} aria-hidden="true" /> : <CircleDashed size={13} strokeWidth={1.75} aria-hidden="true" />}
-        <span className="@max-[1080px]/title:hidden">{published ? t.publishedBadge(published.version) : t.notPublishedBadge}</span>
+        <span className="@max-[760px]/title:hidden">{published ? t.publishedBadge(published.version) : t.notPublishedBadge}</span>
       </button>
       {/* Said only when there is something to do about it. */}
       {(errors > 0 || todos > 0 || unset > 0) && (
@@ -137,7 +137,7 @@ export function FlowTitle() {
           {errors ? (
             <span className="grid h-3.5 w-3.5 place-items-center rounded-full bg-shu-500 text-[9px] font-bold text-white">!</span>
           ) : todos || unset ? (
-            <span className="h-3 w-3 rounded-full border-[1.5px] border-dashed border-amber-600" />
+            <TriangleAlert size={13} strokeWidth={1.75} aria-hidden="true" />
           ) : (
             <CheckIcon />
           )}
@@ -145,7 +145,7 @@ export function FlowTitle() {
             {[errors ? t.toolbar.errors(errors) : "", unset ? t.toolbar.unset(unset) : "", todos ? t.todos.chip(todos) : ""].filter(Boolean).join(" · ") || t.toolbar.valid}
           </span>
           {/* Narrow: the count stays, the words go to the tooltip. */}
-          <span className="hidden tabular-nums @max-[1080px]/title:inline">{errors + unset + todos}</span>
+          <span className="hidden tabular-nums @max-[1080px]/title:inline">{t.toolbar.needsShort(errors + unset + todos)}</span>
         </button>
       )}
       <span className="flex h-6 shrink-0 items-center rounded-md text-[12px] text-slate-500 @max-[1080px]/title:hidden">

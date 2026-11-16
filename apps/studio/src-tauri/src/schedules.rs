@@ -40,6 +40,8 @@ pub struct ScheduleView {
     /// It (or a flow it calls) has nodes that use the mouse and keyboard,
     /// which stop while the screen is locked.
     pub uses_screen: bool,
+    /// When it fires in the coming week, for the week drawn above the list.
+    pub week: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,13 +86,26 @@ fn flows_run_by(svc: &FlowService, id: &FlowId) -> Vec<Flow> {
     flows
 }
 
+/// Times of one schedule drawn in the week: an every-few-minutes one is said as a count past this.
+const WEEK_TIMES: usize = 200;
+
 fn list(state: &AppState) -> CmdResult<ScheduleList> {
     let svc = &state.service;
     let path = path(svc);
+    // A broken holiday list draws the week without days off rather than no week.
+    let calendar = spellsheet_core::calendar::Calendar::load(
+        &spellsheet_core::calendar::Calendar::path(svc.store().root()),
+    )
+    .unwrap_or_default();
     let schedules = Schedules::load(&path)?
         .schedules
         .into_iter()
         .map(|schedule| ScheduleView {
+            week: if schedule.enabled {
+                schedule.when.upcoming(7, &calendar, WEEK_TIMES)
+            } else {
+                Vec::new()
+            },
             flow_name: svc.get(&schedule.flow_id).ok().map(|s| s.name),
             published: svc
                 .published_version(&schedule.flow_id)

@@ -12,6 +12,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useFail, useStudio } from "../context";
 import { api, type RunRecord } from "../lib/api";
 import { formatValue } from "../lib/changes";
+import { explainError } from "../lib/errorText";
+import { findStep } from "../store";
 import { locale, t } from "../lib/i18n";
 import {
   appOf,
@@ -188,6 +190,9 @@ function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | nu
   const ms = durationMs({ startedAt: report.startedAt, finishedAt: report.finishedAt });
   const status = report.status;
   const flowId = flow?.id;
+  // In words from its code, as Runner and the run log say it; the English message is for AI clients.
+  const failedStep = report.error?.stepId && flow ? findStep(flow.steps ?? [], report.error.stepId) : null;
+  const explained = report.error ? explainError(report.error, failedStep) : null;
   const show = (stepId: string) => {
     onView("story");
     goTo(stepId);
@@ -216,7 +221,6 @@ function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | nu
             <div className="mt-4 rounded-lg border border-shu-100 bg-shu-50 px-3.5 py-2.5 text-[13px]">
               <div className="flex items-center gap-2 font-bold text-shu-600">
                 {t.result.failure}
-                <span className="rounded-md bg-sheet px-1.5 text-[11.5px]">{report.error.code}</span>
                 {report.error.stepId && (
                   <button type="button" onClick={() => show(report.error!.stepId!)} className="ml-auto text-[12.5px] font-semibold text-brand-600 hover:underline">
                     {t.result.seeNode}
@@ -225,8 +229,9 @@ function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | nu
               </div>
               <p className="mt-1 break-words text-ink">
                 {report.error.stepLabel ? `${report.error.stepLabel}：` : ""}
-                {report.error.message}
+                {explained?.what}
               </p>
+              {explained?.todo && <p className="mt-0.5 break-words text-slate-600">{explained.todo}</p>}
             </div>
           )}
 
@@ -292,9 +297,9 @@ function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | nu
           </PaperSection>
         </article>
       </div>
-      <footer className="flex shrink-0 items-center gap-2.5 border-t border-slate-200 bg-sheet px-5 py-2.5">
+      <footer className="@container flex shrink-0 items-center gap-2.5 border-t border-slate-200 bg-sheet px-5 py-2.5">
         <span className={`h-2 w-2 rounded-full ${DOT[status] ?? "bg-slate-400"}`} aria-hidden="true" />
-        <span className="flex-1 truncate text-[12px] text-slate-500">
+        <span className="min-w-[5em] flex-1 truncate text-[12px] text-slate-500">
           {t.result.status[status] ?? status}・{seconds(ms)}
           {entry ? `・${originText(entry.origin)}` : ""}
         </span>
@@ -302,15 +307,21 @@ function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | nu
           <button
             type="button"
             onClick={() => void projectApi.open(flowId, "output", false).catch((e) => fail(t.couldNot.openFolder, e))}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3.5 text-[13px] hover:bg-slate-50"
+            title={t.result.openOutput}
+            className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] hover:bg-slate-50 @[640px]:px-3.5"
           >
             <FolderOpen size={14} strokeWidth={1.75} aria-hidden="true" />
-            {t.result.openOutput}
+            <span className="sr-only @[640px]:not-sr-only">{t.result.openOutput}</span>
           </button>
         )}
-        <button type="button" onClick={() => onView("story")} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-sheet px-3.5 text-[13px] hover:bg-slate-50">
+        <button
+          type="button"
+          onClick={() => onView("story")}
+          title={t.result.toChart}
+          className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-sheet px-2.5 text-[13px] hover:bg-slate-50 @[640px]:px-3.5"
+        >
           <FileText size={14} strokeWidth={1.75} aria-hidden="true" />
-          {t.result.toChart}
+          <span className="sr-only @[640px]:not-sr-only">{t.result.toChart}</span>
         </button>
         <button
           type="button"
@@ -318,7 +329,7 @@ function RunPaper({ runId, entry, onView }: { runId: string; entry: FlowRun | nu
             onView("story");
             void startRun();
           }}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold text-on-primary hover:bg-primary-hover"
+          className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-primary px-4 text-[13px] font-semibold text-on-primary hover:bg-primary-hover"
         >
           <Play size={14} strokeWidth={2} aria-hidden="true" />
           {t.result.again}

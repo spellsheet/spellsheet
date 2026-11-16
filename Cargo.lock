@@ -4858,6 +4858,7 @@ dependencies = [
  "spellsheet-system",
  "spellsheet-word",
  "tempfile",
+ "zip 9.1.3",
 ]
 
 [[package]]

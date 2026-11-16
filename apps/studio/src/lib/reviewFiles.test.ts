@@ -33,6 +33,11 @@ describe("usedRows", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ kind: "outputFile", actions: ["Excel 読み取り", "Excel 書き込み"], reads: false, danger: true, status: "added", stepId: "w" });
   });
+
+  it("says a program a node starts as an app, not a folder", () => {
+    const rows = usedRows([effect({ action: "プログラムを実行", target: "cmd", risk: "dangerous", reads: false, program: true })], []);
+    expect(rows.map((r) => r.kind)).toEqual(["app"]);
+  });
 });
 
 describe("readCheck", () => {

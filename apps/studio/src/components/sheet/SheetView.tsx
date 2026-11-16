@@ -3,7 +3,7 @@
 // in the margin. Read as a chart, the same paper keeps its heading and shows
 // the chart (components/chart/ChartBody.tsx) under it.
 import { useRunGate } from "../../lib/runGate";
-import { ArrowDown, ArrowUp, Check, CircleCheck, CircleMinus, CirclePause, CircleX, ArrowRight, Download, EyeOff, FileSpreadsheet, FileText, Globe, History, Play, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, CircleCheck, CircleMinus, CirclePause, CircleX, Download, EyeOff, History, Play, Plus, Sparkles, Trash2 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api, manualApi, type ScheduleView } from "../../lib/api";
 import { useStudio } from "../../context";
@@ -27,6 +27,8 @@ import { useFlowBusy } from "../../lib/useFlowBusy";
 import { useStepMenu } from "../menus";
 import { ChartBody } from "../chart/ChartBody";
 import { StepInspector } from "../inspector/StepInspector";
+import { FlowGlance } from "./FlowGlance";
+import { StepFile, fileSteps } from "./stepFile";
 import { ExportDialog, MaskEditor, type Pictures, ShotFrame, WholeShot, day, madeLine, shotLine, usePictures, useSubflows } from "./pictures";
 import { SheetHeading } from "../SheetHeading";
 import { Stripe } from "../Masthead";
@@ -122,22 +124,6 @@ function texts(items: ManualItem[]): string[] {
 const countSteps = (items: ManualItem[]): number =>
   items.reduce((n, i) => n + (i.kind === "scene" ? i.steps.length : i.kind === "action" ? 1 : "items" in i ? countSteps(i.items) : 0), 0);
 
-/** A file, a site or a value the flow takes in or gives back, as a small card. */
-function Thing({ name, kind, out = false }: { name: string; kind: "file" | "site" | "value"; out?: boolean }) {
-  const Icon = kind === "site" ? Globe : /\.(xlsx?|xlsm|csv)$/i.test(name) ? FileSpreadsheet : FileText;
-  // Only a file's name is split from its folder: a value's words may hold a slash ("A / B").
-  const slash = kind === "file" ? Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\")) : -1;
-  return (
-    <li className={`flex min-w-0 items-center gap-2.5 rounded-[4px] border bg-sheet px-2.5 py-2 ${out ? "border-[var(--color-role-output)] shadow-[inset_3px_0_0_var(--color-role-output)]" : "border-slate-300"}`}>
-      {kind !== "value" && <Icon size={18} strokeWidth={1.5} aria-hidden="true" className={`shrink-0 ${Icon === FileSpreadsheet ? "text-moegi-600" : "text-slate-500"}`} />}
-      <span className="min-w-0">
-        <b className="block text-[13.5px] leading-[1.4] font-semibold break-words text-ink">{slash >= 0 ? name.slice(slash + 1) : name}</b>
-        {slash >= 0 && <small className="block text-[11.5px] leading-[1.4] text-slate-500">{t.sheetView.inFolder(name.slice(0, slash))}</small>}
-      </span>
-    </li>
-  );
-}
-
 /** The flow's last run from anywhere (Writer, Runner, a schedule), read again when one here ends. */
 function useLatestRun(flowId: string | undefined): FlowRun | null {
   const ended = useStudio((s) => (s.run && s.run.flowId === flowId && !isActive(s.run) ? s.run.runId : null));
@@ -174,7 +160,6 @@ function useLatestRun(flowId: string | undefined): FlowRun | null {
 function Head({ doc, when, edition, manifest, latest, actions, short = false }: { doc: ManualDoc; when: string[]; edition: { label: string; updated: string | null }; manifest: ManualManifest | null; latest: FlowRun | null; actions: React.ReactNode; short?: boolean }) {
   const w = t.sheetView;
   const failure = doc.chapters.filter((c) => c.role === "failure").flatMap((c) => texts(c.items));
-  const work = doc.chapters.filter((c) => !c.role);
   const steps = doc.chapters.reduce((n, c) => n + countSteps(c.items), 0);
   // The last run from anywhere (Writer, Runner, a schedule), failed ones too; else the run the pictures came from.
   const ranWhen = latest?.startedAt ?? manifest?.startedAt ?? null;
@@ -203,8 +188,6 @@ function Head({ doc, when, edition, manifest, latest, actions, short = false }: 
       ),
     ],
   ];
-  const ins = [...doc.uses.inputFiles.map((name) => ({ name, kind: "file" as const })), ...doc.uses.apps.map((name) => ({ name, kind: "site" as const })), ...doc.inputs.map((name) => ({ name, kind: "value" as const }))];
-  const outs = [...doc.uses.outputFiles.map((name) => ({ name, kind: "file" as const })), ...doc.outputs.map((name) => ({ name, kind: "value" as const }))];
   const also = [
     { label: t.project.shelves.templates ?? "", text: doc.uses.templates.join(w.and) },
     { label: t.project.shelves.config ?? "", text: doc.uses.config.join(w.and) },
@@ -212,8 +195,6 @@ function Head({ doc, when, edition, manifest, latest, actions, short = false }: 
     { label: w.schedule, text: when.join(w.and) },
     { label: w.onFailure, text: failure.join(w.and) },
   ].filter((r) => r.text !== "");
-  const CAP = "mb-2 text-[11.5px] font-semibold tracking-[0.06em] text-slate-600";
-  const arrow = <ArrowRight size={22} strokeWidth={1.5} aria-hidden="true" className="mx-auto hidden shrink-0 text-slate-400 @[52rem]/paper:block" />;
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-5">
@@ -236,48 +217,7 @@ function Head({ doc, when, edition, manifest, latest, actions, short = false }: 
           {actions}
         </div>
       </div>
-      {!short && (ins.length > 0 || outs.length > 0) && work.length > 0 && (
-        <div className="mt-6 grid gap-x-4 gap-y-4 rounded-[4px] border border-slate-200 bg-paper px-5 py-4 @[52rem]/paper:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)_auto_minmax(0,1fr)] @[52rem]/paper:items-center">
-          <div>
-            <p className={CAP}>{w.input}</p>
-            {ins.length > 0 ? (
-              <ul className="space-y-1.5">
-                {ins.map((x) => (
-                  <Thing key={`${x.kind}:${x.name}`} {...x} />
-                ))}
-              </ul>
-            ) : (
-              <p className="text-[13px] text-slate-500">{w.nothing}</p>
-            )}
-          </div>
-          {arrow}
-          <div>
-            <p className={CAP}>{w.does}</p>
-            <ol className="space-y-1.5 text-[13.5px] leading-[1.5] text-ink">
-              {work.slice(0, 5).map((c) => (
-                <li key={c.number} className="grid grid-cols-[22px_minmax(0,1fr)] items-baseline">
-                  <span className="grid size-[17px] place-items-center self-center rounded-full bg-[var(--manual-navy)] text-[10.5px] font-bold text-sheet tabular-nums">{c.number}</span>
-                  {c.title}
-                </li>
-              ))}
-              {work.length > 5 && <li className="pl-[22px] text-[12.5px] text-slate-500">{w.more(work.length - 5)}</li>}
-            </ol>
-          </div>
-          {arrow}
-          <div>
-            <p className={CAP}>{w.output}</p>
-            {outs.length > 0 ? (
-              <ul className="space-y-1.5">
-                {outs.map((x) => (
-                  <Thing key={`${x.kind}:${x.name}`} {...x} out />
-                ))}
-              </ul>
-            ) : (
-              <p className="text-[13px] text-slate-500">{w.nothing}</p>
-            )}
-          </div>
-        </div>
-      )}
+      {!short && <FlowGlance doc={doc} />}
       {!short && also.length > 0 && (
         <dl className="mt-3 grid grid-cols-1 overflow-hidden rounded-[4px] border border-slate-200 text-[13px] @[52rem]/paper:grid-flow-col @[52rem]/paper:auto-cols-fr @[52rem]/paper:grid-cols-none">
           {also.map((r) => (
@@ -461,6 +401,9 @@ function StepRow({ step, ctx, scene }: { step: ManualStep; ctx: RowCtx; scene?: 
   const wholeScreen = shot && !step.mark && scene!.steps[0] === step && scene!.steps.every((x) => !x.mark);
   const marks: SceneMark[] = step.mark ? [{ number: step.number, rect: step.mark, operates: step.operates }] : [];
   const pictured = shot && (step.mark || wholeScreen);
+  // A step on a file shows the file, as a step on a screen shows the screen.
+  const file = own && !pictured ? ctx.files.get(step.stepId) : undefined;
+  const sheet = typeof (own?.params as Record<string, unknown> | undefined)?.sheet === "string" ? String(own!.params!.sheet) : undefined;
   return (
     <li className="scroll-my-24 border-t border-slate-100 py-3 first:border-t-0 @[52rem]/paper:-mr-[344px]" data-step={own ? step.stepId : undefined} onContextMenu={own ? ctx.menu(step.stepId) : undefined}>
       <div className={`grid grid-cols-[28px_minmax(0,1fr)] gap-y-2.5 ${PICTURE}`}>
@@ -486,12 +429,13 @@ function StepRow({ step, ctx, scene }: { step: ManualStep; ctx: RowCtx; scene?: 
           {/* One level deeper: everything the step is set to, where it is said. A step of a called flow is changed in that flow. */}
           {picked && step.callPath.length === 0 && <Details stepId={step.stepId} ctx={ctx} />}
         </div>
-        {(pictured || changes.length > 0) && (
+        {(pictured || file || changes.length > 0) && (
           <div className="col-span-2 space-y-2.5 pl-7 @[52rem]/paper:col-span-1 @[52rem]/paper:pl-0">
             {changes.map((c) => (
               <ChangeNote key={c.entry.revision} change={c} step={step} defs={ctx.defs} />
             ))}
             {pictured && <StepFigure scene={scene!} shot={shot} marks={marks} pictures={ctx.pictures} />}
+            {file && <StepFile flowId={ctx.flowId} path={file} sheet={sheet} stamp={ctx.stamp} />}
           </div>
         )}
       </div>
@@ -549,6 +493,11 @@ type RowCtx = {
   onAddIn: (parentId: string | null, block: string | null) => void;
   /** The right button on a step: everything else that is done to it. */
   menu: (stepId: string) => React.MouseEventHandler;
+  flowId: string;
+  /** The file each step that first names one works on, by step. */
+  files: ReadonlyMap<string, string>;
+  /** Changes when a run ends, so files a step shows are read again. */
+  stamp: string;
 };
 
 function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
@@ -828,6 +777,7 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
     for (const c of doc?.chapters ?? []) walk(c.items);
     return map;
   }, [doc]);
+  const stepFiles = useMemo(() => (flow ? fileSteps(flow) : new Map<string, string>()), [flow]);
   const changes = useMemo(() => {
     const map = new Map<string, Change[]>();
     for (const entry of pending) {
@@ -841,6 +791,9 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
   const pictures: Pictures = { urls, want, masks, onWhole: (shot, marks) => setWhole({ shot, marks }), onMask: setMasking };
   const ctx: RowCtx = {
     pictures,
+    flowId: flow.id,
+    files: stepFiles,
+    stamp: `${run?.runId ?? ""}|${run?.status ?? ""}`,
     picked: selection?.kind === "step" ? selection.stepId : null,
     changes,
     defs,
@@ -870,7 +823,8 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
   const noSteps = (flow.steps ?? []).length === 0;
 
   return (
-    <div ref={desk} className="flow-chart absolute inset-0 overflow-auto px-5 py-7" data-sheet={mode}>
+    <div className="absolute inset-0 flex flex-col">
+    <div ref={desk} className="flow-chart relative min-h-0 flex-1 overflow-auto px-5 py-7" data-sheet={mode}>
       <div className="mx-auto flex w-fit max-w-full items-start gap-6">
         {/* As a chart the paper is as wide as the chart, and never narrower than the sheet (so it cannot be measured against, and keeps the plain margins). */}
         <article className={`${PAPER} ${chart ? "w-fit min-w-[min(980px,calc(100cqw-40px))]" : "@container/paper w-[980px] max-w-full min-w-0"}`}>
@@ -937,21 +891,20 @@ export function SheetView({ mode, onSheet, onHistory }: { mode: "sheet" | "chart
           </nav>
         )}
       </div>
-      {/* What waits to be looked at, counted once at the foot of the desk; on the review desk its own foot says it. */}
+    </div>
+      {/* What waits to be looked at, counted once at the foot of the desk, under the paper and not over it; on the review desk its own foot says it. */}
       {place === "flows" && pending.length > 0 && (
-        <div className="pointer-events-none sticky bottom-0 z-10 mt-6 flex justify-center">
-          <div className={`pointer-events-auto flex items-center gap-4 rounded-[6px] bg-sheet py-2 pl-4 ${aiBusy ? "pr-4" : "pr-2"} text-[13px] text-ink shadow-[0_0_0_1px_var(--color-slate-300),0_8px_24px_-8px_rgb(16_24_40/0.25)]`}>
-            <span className="flex items-center gap-2">
-              <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" className="text-primary" />
-              {aiBusy ? t.sheetView.aiWorking : t.sheetView.waiting(pending.length)}
-            </span>
-            {/* Not while the AI is still making the flow: what is on the sheet is not all of it yet. */}
-            {!aiBusy && (
-              <button type="button" onClick={() => void approveAll()} className="rounded-[5px] bg-primary px-3 py-1.5 font-medium text-on-primary hover:bg-primary-hover">
-                {t.approveAll}
-              </button>
-            )}
-          </div>
+        <div className="flex shrink-0 items-center justify-center gap-4 border-t border-slate-200 bg-sheet px-4 py-1.5 text-[13px] text-ink" data-pending-bar>
+          <span className="flex items-center gap-2">
+            <Sparkles size={14} strokeWidth={1.75} aria-hidden="true" className="text-primary" />
+            {aiBusy ? t.sheetView.aiWorking : t.sheetView.waiting(pending.length)}
+          </span>
+          {/* Not while the AI is still making the flow: what is on the sheet is not all of it yet. */}
+          {!aiBusy && (
+            <button type="button" onClick={() => void approveAll()} className="rounded-[5px] bg-primary px-3 py-1 font-medium text-on-primary hover:bg-primary-hover">
+              {t.approveAll}
+            </button>
+          )}
         </div>
       )}
       {masking && (

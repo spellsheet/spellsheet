@@ -243,6 +243,18 @@ fn read_parts(path: &str) -> Result<Vec<(String, String)>, StepError> {
     Ok(parts)
 }
 
+/// The body of a `.docx` as paragraphs and tables, for a preview. Reads only `word/document.xml`.
+pub fn document_blocks(path: &Path) -> Result<Vec<docx::Block>, String> {
+    let reader = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| e.to_string())?;
+    let mut entry = archive
+        .by_name("word/document.xml")
+        .map_err(|e| e.to_string())?;
+    let mut xml = String::new();
+    entry.read_to_string(&mut xml).map_err(|e| e.to_string())?;
+    Ok(docx::blocks(&xml))
+}
+
 fn body(parts: &[(String, String)]) -> String {
     parts
         .iter()

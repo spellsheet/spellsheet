@@ -16,6 +16,13 @@ describe("sentence", () => {
     expect(plain(withoutSaveAs(parts))).toBe("「受注一覧」表を表として読む");
   });
 
+  it("reads a target or a list in a param as words, not JSON", () => {
+    const text = plain(sentence({ type: "x.wait", params: { until: { text: "完了" }, files: ["a.csv", "b.csv"] } }, undefined));
+    expect(text).not.toMatch(/[{}[\]"]/);
+    expect(text).toContain("完了");
+    expect(text).toContain("a.csv、b.csv");
+  });
+
   it("reads known step types as Japanese", () => {
     expect(plain(sentence({ type: "control.if", params: { condition: "a > 1" } }, undefined))).toBe("もし a > 1 なら");
     expect(

@@ -11,6 +11,7 @@ import { StudioContext } from "../context";
 import { t } from "../lib/i18n";
 import { baseName, type FilePreview, isImagePath, loadFullPicture, loadPreview, type Picture, type PreviewSource, previewSource, shrink, sizeText } from "../lib/preview";
 import type { StudioState } from "../store";
+import { ArchiveView, DocumentView } from "./DocumentView";
 import { openImage } from "./ImageViewer";
 
 /** How long the pointer rests before the popover opens. */
@@ -184,6 +185,20 @@ export function PreviewBody({ source, head = true, flowId: given, size = "popove
         <div>
           {head && <Head icon={<FileText size={12} />} name={name} />}
           <TextBlock text={preview.text} more={preview.more} />
+        </div>
+      );
+    case "document":
+      return (
+        <div className="w-[360px] max-w-full">
+          {head && <Head icon={<FileText size={12} />} name={name} note={preview.pages ? t.preview.pages(preview.pages) : undefined} />}
+          <DocumentView preview={preview} size={9} height={260} />
+        </div>
+      );
+    case "archive":
+      return (
+        <div className="w-[320px] max-w-full">
+          {head && <Head icon={<FileText size={12} />} name={name} note={t.preview.files(preview.count)} />}
+          <ArchiveView preview={preview} max={8} />
         </div>
       );
     case "missing":

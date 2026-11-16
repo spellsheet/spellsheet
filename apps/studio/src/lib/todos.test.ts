@@ -45,6 +45,13 @@ describe("personTodos", () => {
     });
     expect(registered.map((t) => t.kind)).toEqual(["pick"]);
   });
+
+  it("takes a folder with files in it as there", () => {
+    const folder = { ...flow, steps: [{ id: "w", type: "excel.readRows", params: { path: "input/web" } }] } as Flow;
+    const files = (paths: string[]) => ({ flowId: "flw_1", dir: "", folders: [], files: paths.map((path) => ({ path }) as never) });
+    expect(personTodos(folder, defs, new Set(), files(["input/web/index.html"])).filter((t) => t.kind === "file")).toEqual([]);
+    expect(personTodos(folder, defs, new Set(), files(["input/website.html"])).filter((t) => t.kind === "file")).toHaveLength(1);
+  });
 });
 
 describe("an account picked each run", () => {

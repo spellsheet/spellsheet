@@ -79,7 +79,22 @@ function code(value: unknown): Part {
   if (value === undefined || value === null || value === "") return { text: locale === "ja" ? "（未設定）" : "(not set)" };
   if (secretName(value)) return { code: t.manual.usesLogin(secretName(value) ?? "") };
   // Words with worked-out parts in them (a file named by the day) read as the words: the braces are the flow's own writing.
-  return { code: typeof value === "string" ? readable(value).replace(/\{\{\s*(.*?)\s*\}\}/g, "$1") : JSON.stringify(value) };
+  return { code: typeof value === "string" ? readable(value).replace(/\{\{\s*(.*?)\s*\}\}/g, "$1") : valueWords(value) };
+}
+
+/** Keys that make a record a place on a screen (a target), read as 「受注一覧」見出し. */
+const TARGET_KEYS = ["role", "name", "text", "label", "css", "xpath", "placeholder", "automationId", "title", "testId"];
+
+/** A value that is not a string, in words instead of JSON: a target as on screen, a list joined, a record as 項目: 値. */
+function valueWords(value: unknown): string {
+  if (typeof value !== "object" || value === null) return String(value);
+  const sep = locale === "ja" ? "、" : ", ";
+  if (Array.isArray(value)) return value.map((v) => (typeof v === "object" && v !== null ? valueWords(v) : String(v))).join(sep);
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some((k) => TARGET_KEYS.includes(k))) return targetText(record);
+  return Object.entries(record)
+    .map(([k, v]) => `${k}: ${typeof v === "object" && v !== null ? valueWords(v) : String(v)}`)
+    .join(sep);
 }
 
 /** The name of a registered secret a value refers to (`{ "secret": "受注システム", "field": … }`). */

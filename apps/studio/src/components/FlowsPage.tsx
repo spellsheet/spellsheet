@@ -2,7 +2,7 @@
 // kept beside the chart. Find, sort and filter by tag; make, import,
 // duplicate and delete; pick one to open it in the editor.
 import type { FlowSummary } from "@spellsheet/schema";
-import { CalendarClock, ChevronDown, CircleAlert, ClipboardList, Copy, Download, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
+import { ArrowLeft, CalendarClock, ChevronDown, CircleAlert, ClipboardList, Copy, Download, FolderOpen, FolderOutput, FolderSync, MessageSquareText, MoreHorizontal, MousePointerClick, SearchX, Send, Trash2, Upload, Workflow } from "lucide-react";
 import { openAsk, useAgent, useAgentApi } from "../agent";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStudio, useStudioApi } from "../context";
@@ -107,6 +107,9 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
     void consult(agentStore);
   };
   const [text, setText] = useState("");
+  // With the AI column open on the left, that is the one box to write in: the
+  // first screen points there instead of a second box saying the same.
+  const dockOpen = useAgent((a) => a.open);
   const ask = () => {
     const request = text.trim();
     if (!available) setNeedsAi(true);
@@ -122,6 +125,23 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
   return (
     <section aria-label={t.firstSteps.title} className="rounded-lg border border-slate-200 bg-sheet p-5">
       <h2 className="text-[15px] font-semibold text-ink">{t.firstSteps.title}</h2>
+      {dockOpen ? (
+        <div className="mt-3 flex items-start gap-3 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 dark:bg-brand-950/30" data-first-ask>
+          <ArrowLeft size={18} strokeWidth={1.75} className="mt-0.5 shrink-0 text-brand-600" aria-hidden="true" />
+          <div className="min-w-0 text-[13px] leading-relaxed">
+            <p className="font-medium text-ink">{t.firstSteps.inDock}</p>
+            <p className="mt-0.5 text-slate-600">{t.firstSteps.placeholder}</p>
+            <button
+              type="button"
+              onClick={() => openAsk(agentStore, { draft: t.firstSteps.placeholder.replace(/^例：|^e\.g\.\s*/i, "") })}
+              className="mt-1 text-[12.5px] font-medium text-brand-600 hover:underline"
+            >
+              {t.firstSteps.useExample}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
       <p className="mt-1 text-[13px] text-slate-500">{t.firstSteps.lead}</p>
       <form
         className="mt-3"
@@ -161,6 +181,8 @@ function FirstSteps({ onCreate, onImport }: { onCreate: () => void; onImport: ()
           </p>
         )}
       </form>
+        </>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-paper px-3 py-2.5">
         <ClipboardList size={16} strokeWidth={1.75} className="shrink-0 text-brand-500" aria-hidden="true" />
         <div className="min-w-0 flex-1">

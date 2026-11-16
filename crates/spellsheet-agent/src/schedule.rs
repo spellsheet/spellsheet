@@ -383,6 +383,27 @@ impl When {
         }
     }
 
+    /// The times it fires from now through the next `days` days (at most
+    /// `max`), as RFC 3339 with the local offset: the week Studio draws.
+    pub fn upcoming(&self, days: i64, calendar: &Calendar, max: usize) -> Vec<String> {
+        let now = Zoned::now();
+        let Ok(until) = now.checked_add(jiff::Span::new().days(days)) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        let mut after = now;
+        while out.len() < max {
+            match self.next_after(&after, calendar) {
+                Some(at) if at <= until => {
+                    out.push(at.timestamp().display_with_offset(at.offset()).to_string());
+                    after = at;
+                }
+                _ => break,
+            }
+        }
+        out
+    }
+
     /// The first time after `after` it fires (`None`: never again, or a
     /// file trigger, which has no times), with the company's `calendar`.
     pub fn next_after(&self, after: &Zoned, calendar: &Calendar) -> Option<Zoned> {
@@ -624,6 +645,27 @@ mod tests {
             next(&day31, "2026-11-01T00:00").as_deref(),
             Some("2026-11-30 Mon 18:00")
         );
+    }
+
+    #[test]
+    fn upcoming_lists_the_week_up_to_a_limit() {
+        let daily = When::Daily {
+            at: "08:00".into(),
+            days: vec![],
+            skip_holidays: false,
+        };
+        let week = daily.upcoming(7, &Calendar::default(), 200);
+        assert!((7..=8).contains(&week.len()), "{week:?}");
+        assert!(week.windows(2).all(|w| w[0] < w[1]));
+        assert!(week.iter().all(|t| t.contains("T08:00:00")));
+        let often = When::Every {
+            minutes: 1,
+            from: None,
+            to: None,
+            days: vec![],
+            skip_holidays: false,
+        };
+        assert_eq!(often.upcoming(7, &Calendar::default(), 5).len(), 5);
     }
 
     #[test]

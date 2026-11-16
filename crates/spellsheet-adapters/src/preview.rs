@@ -32,6 +32,14 @@ const IMAGES: &[(&str, &str)] = &[
 ];
 const WORKBOOKS: &[&str] = &["xlsx", "xlsm"];
 const TABLES: &[&str] = &["csv", "tsv"];
+/// Paragraphs and tables of a document shown before "more".
+pub const DOCUMENT_BLOCKS: usize = 40;
+/// Pages of a PDF read for its preview.
+const PDF_PAGES: usize = 2;
+/// PDFs larger than this are not read for a preview.
+const MAX_PDF_BYTES: u64 = 20 * 1024 * 1024;
+/// Names listed from a zip file.
+const ARCHIVE_ENTRIES: usize = 30;
 const TEXTS: &[&str] = &[
     "txt", "md", "log", "json", "xml", "html", "htm", "yaml", "yml", "ini", "toml",
 ];
@@ -49,6 +57,7 @@ pub fn previewable(path: &Path) -> bool {
         || WORKBOOKS.contains(&ext.as_str())
         || TABLES.contains(&ext.as_str())
         || TEXTS.contains(&ext.as_str())
+        || matches!(ext.as_str(), "docx" | "docm" | "pdf" | "zip")
 }
 
 /// The preview of `path` as Studio shows it, one of:
@@ -97,10 +106,106 @@ pub fn preview(path: &Path, sheet: Option<&str>) -> Value {
                 json!({ "kind": "text", "text": shown, "more": more })
             })
             .map_err(|e| e.to_string())
+    } else if ext == "docx" || ext == "docm" {
+        spellsheet_word::document_blocks(path).map(|blocks| document(&blocks, None))
+    } else if ext == "pdf" {
+        if bytes > MAX_PDF_BYTES {
+            return json!({ "kind": "tooLarge", "bytes": bytes });
+        }
+        std::fs::read(path)
+            .map_err(|e| e.to_string())
+            .and_then(|data| spellsheet_pdf::preview_pages(&data, PDF_PAGES))
+            .map(|(pages, count)| pdf_document(&pages, count))
+    } else if ext == "zip" {
+        archive(path)
     } else {
         Ok(json!({ "kind": "file", "bytes": bytes }))
     };
     result.unwrap_or_else(|message| json!({ "kind": "unreadable", "message": message }))
+}
+
+/// `{kind: "document", blocks, more, pages?}`: paragraphs (`{kind: "paragraph", text, heading}`)
+/// and tables (`{kind: "table", rows}`). Runs of empty paragraphs become one.
+fn document(blocks: &[spellsheet_word::docx::Block], pages: Option<usize>) -> Value {
+    use spellsheet_word::docx::Block;
+    let mut shown: Vec<Value> = Vec::new();
+    let mut blank = false;
+    let mut more = false;
+    for block in blocks {
+        if shown.len() >= DOCUMENT_BLOCKS {
+            more = true;
+            break;
+        }
+        match block {
+            Block::Paragraph { text, .. } if text.trim().is_empty() => blank = true,
+            Block::Paragraph { text, heading } => {
+                if blank && !shown.is_empty() {
+                    shown.push(json!({ "kind": "paragraph", "text": "", "heading": false }));
+                }
+                blank = false;
+                shown.push(json!({ "kind": "paragraph", "text": text, "heading": heading }));
+            }
+            Block::Table { rows } => {
+                blank = false;
+                let rows: Vec<Vec<String>> = rows
+                    .iter()
+                    .take(TABLE_ROWS * 4)
+                    .map(|r| r.iter().take(TABLE_COLUMNS).cloned().collect())
+                    .collect();
+                shown.push(json!({ "kind": "table", "rows": rows }));
+            }
+        }
+    }
+    let mut out = json!({ "kind": "document", "blocks": shown, "more": more });
+    if let Some(pages) = pages {
+        out["pages"] = json!(pages);
+    }
+    out
+}
+
+/// A PDF's first pages as a document: each line a paragraph.
+fn pdf_document(pages: &[String], count: usize) -> Value {
+    use spellsheet_word::docx::Block;
+    let mut blocks = Vec::new();
+    for page in pages {
+        for line in page.lines() {
+            blocks.push(Block::Paragraph {
+                text: line.trim_end().to_owned(),
+                heading: false,
+            });
+        }
+        blocks.push(Block::Paragraph {
+            text: String::new(),
+            heading: false,
+        });
+    }
+    let mut out = document(&blocks, Some(count));
+    if count > pages.len() {
+        out["more"] = json!(true);
+    }
+    out
+}
+
+/// `{kind: "archive", entries: [{name, bytes}], count, more}`: the files a zip holds.
+fn archive(path: &Path) -> Result<Value, String> {
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+    let mut entries = Vec::new();
+    let mut count = 0;
+    for i in 0..zip.len() {
+        let entry = zip.by_index_raw(i).map_err(|e| e.to_string())?;
+        if entry.is_dir() {
+            continue;
+        }
+        count += 1;
+        if entries.len() < ARCHIVE_ENTRIES {
+            let name = entry.name().map_err(|e| e.to_string())?.into_owned();
+            entries.push(json!({ "name": name, "bytes": entry.size() }));
+        }
+    }
+    Ok(
+        json!({ "kind": "archive", "entries": entries, "count": count, "more": count > entries.len() }),
+    )
 }
 
 /// The first [`HEAD_BYTES`] of a file, cut after its last full line.
@@ -225,6 +330,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_word_document_shows_its_paragraphs_and_tables_in_order() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/tutorials/invoices/templates/請求書_ひな形.docx");
+        let shown = preview(&path, None);
+        assert_eq!(shown["kind"], "document", "{shown}");
+        let blocks = shown["blocks"].as_array().unwrap();
+        assert!(
+            blocks.iter().any(|b| b["kind"] == "paragraph"
+                && b["text"].as_str().is_some_and(|t| t.contains("請求書"))),
+            "{shown}"
+        );
+        assert!(blocks.iter().any(|b| b["kind"] == "table"), "{shown}");
+    }
+
+    #[test]
+    fn a_zip_lists_its_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.zip");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        zip.add_directory("sub/", options).unwrap();
+        zip.start_file("sub/請求書.docx", options).unwrap();
+        std::io::Write::write_all(&mut zip, b"abc").unwrap();
+        zip.finish().unwrap();
+        let shown = preview(&path, None);
+        assert_eq!(shown["kind"], "archive", "{shown}");
+        assert_eq!(shown["count"], 1);
+        assert_eq!(shown["entries"][0]["name"], "sub/請求書.docx");
+        assert_eq!(shown["entries"][0]["bytes"], 3);
+    }
+
+    #[test]
     fn a_missing_file_says_so() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
@@ -314,7 +451,7 @@ mod tests {
     #[test]
     fn other_files_give_their_size() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("archive.zip");
+        let path = dir.path().join("setup.exe");
         std::fs::write(&path, b"1234").unwrap();
         assert_eq!(preview(&path, None), json!({ "kind": "file", "bytes": 4 }));
         assert!(!previewable(&path));
