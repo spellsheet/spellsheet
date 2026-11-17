@@ -258,44 +258,6 @@ export function layoutRoute(
     }
     return out;
   };
-  /** The steps of a way that parts from the line, as stations one after another. */
-  const flat = (list: Step[]): Atom[] => {
-    const out: Atom[] = [];
-    for (const step of live(list)) {
-      const inner = blocksOf(step).flatMap(([, l]) => live(l));
-      if (stops(step)) out.push({ k: "term", step });
-      else if (step.type === IF || step.type === SWITCH) {
-        out.push({ k: "ask", step });
-        out.push(
-          ...flat(
-            blocksOf(step)
-              .flatMap(([, l]) => l)
-              .flatMap((c) =>
-                c.type === CASE ? blocksOf(c).flatMap(([, l]) => l) : [c],
-              ),
-          ),
-        );
-      } else if (
-        inner.length > 0 ||
-        step.type === GROUP ||
-        LOOP_TYPES.has(step.type)
-      ) {
-        const kind: SpanKind =
-          LOOP_TYPES.has(step.type) || step.type === WAIT_UNTIL
-            ? "loop"
-            : step.type === TRY
-              ? "try"
-              : "group";
-        out.push({ k: "s0", step, kind }, ...flat(inner), {
-          k: "s1",
-          step,
-          kind,
-        });
-      } else out.push({ k: "st", step, minor: minorOf(step) });
-    }
-    return out;
-  };
-
   const one = (step: Step, top: boolean): Atom[] => {
     const blocks = step.blocks ?? {};
     if (step.type === IF) {
@@ -323,11 +285,21 @@ export function layoutRoute(
           ...atoms(yes),
         ];
       if (yes.length === 0 && no.length === 0) return [{ k: "ask", step }];
-      // The answer with nothing to do (else the second) stays on the line.
-      const [stay, part, stayBlock, partBlock] =
+      // The answer with nothing to do (else the second) stays on the line, unless it stops and the other goes on.
+      const [first, second] =
         no.length === 0 || yes.length > 0
-          ? [no, yes, "else", "then"]
-          : [yes, no, "then", "else"];
+          ? ([
+              [no, "else"],
+              [yes, "then"],
+            ] as const)
+          : ([
+              [yes, "then"],
+              [no, "else"],
+            ] as const);
+      const [[stay, stayBlock], [part, partBlock]] =
+        ends(atoms(first[0])) && !ends(atoms(second[0]))
+          ? [second, first]
+          : [first, second];
       return [
         {
           k: "fork",
@@ -335,7 +307,7 @@ export function layoutRoute(
           bar: false,
           main: atoms(stay),
           mainAnswer: words.answer(step, stayBlock),
-          ways: [{ answer: words.answer(step, partBlock), atoms: flat(part) }],
+          ways: [{ answer: words.answer(step, partBlock), atoms: atoms(part) }],
         },
       ];
     }
@@ -343,7 +315,7 @@ export function layoutRoute(
       const cases = live(blocks.cases).filter((c) => c.type === CASE);
       const ways = cases.map((c) => ({
         answer: words.answer(step, "cases", c),
-        atoms: flat(blocksOf(c).flatMap(([, l]) => l)),
+        atoms: atoms(blocksOf(c).flatMap(([, l]) => live(l))),
       }));
       return [
         {
@@ -364,7 +336,7 @@ export function layoutRoute(
           step,
           bar: true,
           main: first ? atoms([first]) : [],
-          ways: rest.map((b) => ({ answer: "", atoms: flat([b]) })),
+          ways: rest.map((b) => ({ answer: "", atoms: atoms([b]) })),
         },
       ];
     }
@@ -381,7 +353,7 @@ export function layoutRoute(
               {
                 k: "catch",
                 step,
-                atoms: flat(caught),
+                atoms: atoms(caught),
                 open: !caught.some((s) => s.type === FAIL),
               },
             ]
@@ -429,6 +401,34 @@ export function layoutRoute(
     ];
   };
 
+  /** Whether a run of atoms stops the flow at its end (nothing after it is reached). */
+  const ends = (list: Atom[]): boolean => {
+    const last = list.filter((b) => b.k !== "stage" && b.k !== "s1").at(-1);
+    if (!last) return false;
+    if (last.k === "term") return true;
+    if (last.k === "fork")
+      return (
+        !last.bar &&
+        ends(last.main) &&
+        last.ways.length > 0 &&
+        last.ways.every((w) => ends(w.atoms))
+      );
+    return false;
+  };
+  /** How far over a fork's line each way's track runs: past what the track under it reaches up and what it hangs down. */
+  const lift = (a: Extract<Atom, { k: "fork" }>): number[] => {
+    let reach = Math.max(0, ...a.main.map(up));
+    return a.ways.map((w) => {
+      const at =
+        reach + Math.max(SIDE_UP, Math.max(0, ...w.atoms.map(down)) + 64);
+      reach = at + Math.max(0, ...w.atoms.map(up));
+      return at;
+    });
+  };
+  /** How far under its line a catch track runs: past what climbs from it. */
+  const sink = (a: Extract<Atom, { k: "catch" }>): number =>
+    Math.max(CATCH_DOWN, Math.max(0, ...a.atoms.map(up)) + 64);
+
   /** How far an atom runs along the line. */
   const width = (a: Atom): number => {
     switch (a.k) {
@@ -464,20 +464,21 @@ export function layoutRoute(
     }
   };
   /** How high over the line an atom reaches (tracks that part from it), and how far under (spurs and failure tracks). */
-  const up = (a: Atom): number =>
-    a.k === "fork"
-      ? Math.max(0, ...a.main.map(up)) + SIDE_UP * Math.max(1, a.ways.length)
-      : 0;
-  const down = (a: Atom): number =>
-    a.k === "ask" && a.stop
-      ? SPUR + PILL_H
-      : a.k === "term"
-        ? SPUR + PILL_H
-        : a.k === "catch"
-          ? CATCH_DOWN + 56
-          : a.k === "fork"
-            ? Math.max(0, ...a.main.map(down))
-            : 0;
+  function up(a: Atom): number {
+    if (a.k === "fork") {
+      const at = lift(a);
+      if (at.length === 0) return Math.max(0, ...a.main.map(up)) + SIDE_UP;
+      return at.at(-1)! + Math.max(0, ...a.ways.at(-1)!.atoms.map(up));
+    }
+    return 0;
+  }
+  function down(a: Atom): number {
+    if ((a.k === "ask" && a.stop) || a.k === "term") return SPUR + PILL_H;
+    if (a.k === "catch")
+      return sink(a) + Math.max(56, Math.max(0, ...a.atoms.map(down)));
+    if (a.k === "fork") return Math.max(0, ...a.main.map(down));
+    return 0;
+  }
 
   const line = atoms(steps, true);
   const stagesUsed = line.filter((a) => a.k === "stage").length;
@@ -508,11 +509,16 @@ export function layoutRoute(
       need = STATION_W;
     }
     if (x + need > rowWidth && rows.at(-1)!.length > 0 && a.k !== "s1") {
-      rows.push([]);
+      // A part's name left at the end of a row goes on with its part.
+      const prev = rows.at(-1)!;
+      const name =
+        prev.at(-1)?.k === "stage" && prev.length > 1 ? prev.pop()! : null;
+      rows.push(name ? [name] : []);
       x = ROW_X;
+      const named = a.k === "stage" ? a : name;
       tagEnd =
-        a.k === "stage"
-          ? ROW_X + textWidth(words.stage(a.stage), 13) + 48
+        named?.k === "stage"
+          ? ROW_X + textWidth(words.stage(named.stage), 13) + 48
           : -Infinity;
     }
     rows.at(-1)!.push(a);
@@ -598,6 +604,7 @@ export function layoutRoute(
     row: number;
   }[] = [];
   let level = 0;
+  let lastStop: number | undefined;
   let top = 0;
   let maxX = 0;
   const rowY: number[] = [];
@@ -716,6 +723,7 @@ export function layoutRoute(
             const cx = x + w / 2;
             const sw = stopW(words.stop(a.step));
             if (onLine) {
+              lastStop = cx;
               out.tracks.push({
                 points: [
                   [cx, ly],
@@ -777,7 +785,6 @@ export function layoutRoute(
           case "fork": {
             const w = width(a);
             const x0 = x;
-            const mainUp = Math.max(0, ...a.main.map(up));
             out.stations.push({
               kind: a.bar ? "bar" : "ask",
               step: a.step,
@@ -791,29 +798,31 @@ export function layoutRoute(
               // Over the line, left of the diamond: the side track climbs away to the right.
               // (At the head of a row nothing stands under it, and the row's turn is on the left: under it.)
               text: a.bar ? words.title(a.step) : words.question(a.step),
-              ...(x0 - ROW_X < 24
+              ...(x0 - ROW_X < 24 || side === "above"
                 ? { x: x0 + 18, y: ly + 30, anchor: "middle" as const }
                 : { x: x0 + 4, y: ly - 12, anchor: "end" as const }),
               tone: "ask",
               step: a.step,
             });
+            const lifts = lift(a);
             a.ways.forEach((way, i) => {
-              const ty = ly - mainUp - SIDE_UP * (i + 1);
+              const ty = ly - lifts[i]!;
               const len =
                 way.atoms.reduce((n, b) => n + width(b), 0) +
                 (way.atoms.length === 0 ? 60 : 0);
               const sx = x0 + 18;
               const ex = x0 + w - 12;
-              out.tracks.push({
+              const track = {
                 points: [
                   [sx, ly],
                   [sx + RAMP, ty],
                   [ex - RAMP, ty],
                   [ex, ly],
-                ],
+                ] as [number, number][],
                 stage,
-                tone: "side",
-              });
+                tone: "side" as const,
+              };
+              out.tracks.push(track);
               if (way.answer)
                 out.notes.push({
                   text: way.answer,
@@ -824,7 +833,16 @@ export function layoutRoute(
                 });
               const save = x;
               x = sx + RAMP + Math.max(0, (ex - sx - RAMP * 2 - len) / 2);
+              const stopsBefore = out.stops.length;
               lay(way.atoms, ty, false, "above");
+              // A way that stops does not come back to the line: its track ends at the stop.
+              const stop = out.stops.slice(stopsBefore).at(-1);
+              if (ends(way.atoms) && stop && stop.y < ty)
+                track.points = [
+                  [sx, ly],
+                  [sx + RAMP, ty],
+                  [Math.max(sx + RAMP, stop.x + 6), ty],
+                ];
               x = save;
             });
             if (a.mainAnswer && a.ways.length > 0)
@@ -843,7 +861,7 @@ export function layoutRoute(
           }
           case "catch": {
             const w = width(a);
-            const ty = ly + CATCH_DOWN;
+            const ty = ly + sink(a);
             const sx = x;
             const ex = x + w;
             const points: [number, number][] = [
@@ -899,9 +917,8 @@ export function layoutRoute(
       });
     } else {
       // A flow whose last step stops has no end to reach.
-      const last = line.filter((b) => b.k !== "stage" && b.k !== "s1").at(-1);
-      if (last?.k === "term") {
-        run.push([x - STATION_W / 2, y]);
+      if (ends(line)) {
+        run.push([lastStop ?? x - STATION_W / 2, y]);
         endRun();
       } else {
         run.push([x + 24, y]);

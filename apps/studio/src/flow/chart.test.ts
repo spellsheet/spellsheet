@@ -177,6 +177,36 @@ describe("layoutRoute", () => {
     expect(empty.pills.map((p) => p.kind)).toEqual(["start", "end"]);
   });
 
+  it("keeps a question asked on a track above as a fork of its own, over that track", () => {
+    const a = s("browser.click");
+    const b = s("variable.set");
+    const inner = s("control.if", { then: [a], else: [b] });
+    const outer = s("control.if", {
+      then: [s("browser.click"), inner],
+      else: [],
+    });
+    const r = layoutRoute([outer], defs);
+    const sides = r.tracks.filter((t) => t.tone === "side");
+    expect(sides).toHaveLength(2);
+    const at = (step: Step) => r.stations.find((x) => x.step === step)!;
+    // One answer of the inner question climbs to a track of its own; the other stays on the outer track.
+    expect(at(a).y).not.toBe(at(b).y);
+    expect(Math.min(at(a).y, at(b).y)).toBeLessThan(at(inner).y);
+    expect(Math.max(at(a).y, at(b).y)).toBe(at(inner).y);
+  });
+
+  it("does not bring a way that stops back to the line, and draws no end when every way stops", () => {
+    const outer = s("control.if", {
+      then: [s("browser.click"), s("control.fail")],
+      else: [s("variable.set"), s("control.fail")],
+    });
+    const r = layoutRoute([outer], defs);
+    const side = r.tracks.find((t) => t.tone === "side")!;
+    const y0 = side.points[0]![1];
+    expect(side.points.at(-1)![1]).not.toBe(y0);
+    expect(r.pills.map((p) => p.kind)).toEqual(["start"]);
+  });
+
   it("stands no two stations on one place", () => {
     const r = layoutRoute(
       [
