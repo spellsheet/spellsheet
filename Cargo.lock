@@ -4840,7 +4840,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-adapters"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "base64 0.22.1",
  "csv",
@@ -4863,7 +4863,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-agent"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "base64 0.22.1",
  "jiff",
@@ -4887,7 +4887,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-browser"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "serde_json",
  "spellsheet-core",
@@ -4902,7 +4902,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-cli"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "anyhow",
  "clap",
@@ -4928,7 +4928,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-com"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "serde_json",
  "spellsheet-runtime",
@@ -4938,7 +4938,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-core"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -4960,7 +4960,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-db"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "odbc-api",
  "serde_json",
@@ -4973,7 +4973,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-desktop"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "base64 0.22.1",
  "encoding_rs",
@@ -4993,7 +4993,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-excel"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "serde_json",
  "spellsheet-com",
@@ -5007,7 +5007,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-files"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "csv",
  "encoding_rs",
@@ -5025,7 +5025,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-mail"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "base64 0.22.1",
  "jiff",
@@ -5044,7 +5044,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-manager"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "axum",
  "ring",
@@ -5063,7 +5063,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-mcp"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "anyhow",
  "rmcp",
@@ -5081,7 +5081,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-pdf"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "pdf-extract",
  "serde_json",
@@ -5095,7 +5095,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-plugins"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "dirs",
  "jsonschema",
@@ -5119,7 +5119,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-runtime"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "schemars 1.2.3",
  "serde",
@@ -5136,7 +5136,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-secrets"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -5157,7 +5157,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-system"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "base64 0.22.1",
  "clipboard-win",
@@ -5181,7 +5181,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-word"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "serde_json",
  "spellsheet-com",
@@ -5195,7 +5195,7 @@ dependencies = [
 
 [[package]]
 name = "spellsheet-writer"
-version = "0.1.33"
+version = "0.1.34"
 dependencies = [
  "base64 0.22.1",
  "dirs",

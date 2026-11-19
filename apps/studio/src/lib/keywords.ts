@@ -23,13 +23,20 @@ export const KEYWORD: Record<string, string> = {
 const MAX = 36;
 
 function text(value: unknown): string {
-  const s = typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
+  const s =
+    typeof value === "string"
+      ? value
+      : value == null
+        ? ""
+        : JSON.stringify(value);
   return s.length > MAX ? `${s.slice(0, MAX - 1)}…` : s;
 }
 
 /** The label of `block` of `step`, falling back to the registry's `label`. */
 export function blockLabel(step: Step, block: string, label: string): string {
-  return locale === "ja" ? blockLabelJa(step, block, label) : blockLabelEn(step, block, label);
+  return locale === "ja"
+    ? blockLabelJa(step, block, label)
+    : blockLabelEn(step, block, label);
 }
 
 function blockLabelEn(step: Step, block: string, label: string): string {
@@ -46,7 +53,10 @@ function blockLabelEn(step: Step, block: string, label: string): string {
     case "control.repeat:body":
       return `${text(p.count)} times${p.indexVar ? ` (count → ${p.indexVar})` : ""}`;
     case "control.forEach:body": {
-      const at = p.concurrency && Number(p.concurrency) > 1 ? `, ${p.concurrency} at a time` : "";
+      const at =
+        p.concurrency && Number(p.concurrency) > 1
+          ? `, ${p.concurrency} at a time`
+          : "";
       return `each of ${text(p.items)} → ${p.itemVar ?? "item"}${at}`;
     }
     case "control.switch:cases":
@@ -80,7 +90,10 @@ function blockLabelJa(step: Step, block: string, label: string): string {
     case "control.repeat:body":
       return `${text(p.count)} 回${p.indexVar ? `（何回目 → ${p.indexVar}）` : ""}`;
     case "control.forEach:body": {
-      const at = p.concurrency && Number(p.concurrency) > 1 ? `・${p.concurrency} 件ずつ同時` : "";
+      const at =
+        p.concurrency && Number(p.concurrency) > 1
+          ? `・${p.concurrency} 件ずつ同時`
+          : "";
       return `${text(p.items)} の 1 件ずつ → ${p.itemVar ?? "item"}${at}`;
     }
     case "control.switch:cases":
@@ -119,7 +132,9 @@ export function laneLabel(step: Step, block: string, label: string): string {
     case "control.try:try":
       return ja ? "実行" : "Run";
     case "control.try:catch":
-      return ja ? `失敗したとき（→ ${p.errorVar ?? "error"}）` : `On failure (→ ${p.errorVar ?? "error"})`;
+      return ja
+        ? `失敗したとき（→ ${p.errorVar ?? "error"}）`
+        : `On failure (→ ${p.errorVar ?? "error"})`;
     case "control.try:finally":
       return ja ? "最後に必ず" : "Always at the end";
     case "control.switch:cases":
@@ -140,23 +155,41 @@ export function laneLabel(step: Step, block: string, label: string): string {
 export function loopBackLabel(step: Step): string {
   const ja = locale === "ja";
   if (step.type === "control.forEach") return ja ? "次の 1 件へ" : "Next item";
-  if (step.type === "wait.until") return ja ? "もう一度確かめる" : "Check again";
+  if (step.type === "wait.until")
+    return ja ? "もう一度確かめる" : "Check again";
   return ja ? "次の回へ" : "Next round";
 }
 
 /** What a loop asks each time round (on its decision), and its two answers. */
-export function loopQuestion(step: Step): { question: string; yes: string; no: string } {
+export function loopQuestion(step: Step): {
+  question: string;
+  yes: string;
+  no: string;
+} {
   const ja = locale === "ja";
   const p = (step.params ?? {}) as Record<string, unknown>;
   const answers = ja ? { yes: "はい", no: "いいえ" } : { yes: "Yes", no: "No" };
   switch (step.type) {
     case "control.forEach":
-      return { question: ja ? "次の 1 件がある？" : "Another item?", ...answers };
+      return {
+        question: ja ? "次の 1 件がある？" : "Another item?",
+        ...answers,
+      };
     case "control.repeat":
-      return { question: ja ? "まだ回数が残っている？" : "Rounds left?", ...answers };
+      return {
+        question: ja ? "まだ回数が残っている？" : "Rounds left?",
+        ...answers,
+      };
     default: {
       const condition = plainExpr(p.condition);
-      return { question: condition ? `${condition}${ja ? "？" : "?"}` : ja ? "条件を満たす？" : "Condition holds?", ...answers };
+      return {
+        question: condition
+          ? `${condition}${ja ? "？" : "?"}`
+          : ja
+            ? "条件を満たす？"
+            : "Condition holds?",
+        ...answers,
+      };
     }
   }
 }
@@ -167,20 +200,34 @@ export function branchQuestion(step: Step): string {
   const p = (step.params ?? {}) as Record<string, unknown>;
   if (step.type === "control.switch") {
     const value = plainExpr(p.value);
-    return value ? (ja ? `${value} は？` : `${value}?`) : ja ? "値は？" : "Which value?";
+    return value
+      ? ja
+        ? `${value} は？`
+        : `${value}?`
+      : ja
+        ? "値は？"
+        : "Which value?";
   }
   const condition = plainExpr(p.condition);
-  return condition ? `${condition}${ja ? "？" : "?"}` : ja ? "条件を満たす？" : "Condition holds?";
+  return condition
+    ? `${condition}${ja ? "？" : "?"}`
+    : ja
+      ? "条件を満たす？"
+      : "Condition holds?";
 }
 
 /** On the line out of a loop's frame: when it leaves. */
 export function loopExitLabel(step: Step): string {
   const ja = locale === "ja";
-  if (step.type === "control.forEach") return ja ? "すべて終わったら" : "When all are done";
-  if (step.type === "control.while") return ja ? "条件が外れたら" : "When the condition fails";
-  if (step.type === "wait.until") return ja ? "条件を満たしたら" : "When the condition holds";
+  if (step.type === "control.forEach")
+    return ja ? "すべて終わったら" : "When all are done";
+  if (step.type === "control.while")
+    return ja ? "条件が外れたら" : "When the condition fails";
+  if (step.type === "wait.until")
+    return ja ? "条件を満たしたら" : "When the condition holds";
   const count = (step.params as Record<string, unknown> | undefined)?.count;
-  if (typeof count === "number") return ja ? `${count} 回終えたら` : `After ${count} rounds`;
+  if (typeof count === "number")
+    return ja ? `${count} 回終えたら` : `After ${count} rounds`;
   return ja ? "回数を終えたら" : "After the last round";
 }
 
@@ -196,20 +243,39 @@ export type LoopOutcome = "running" | "done" | "left" | "failed" | "stopped";
  * How far a loop got, on its foot: 「12 件中 12 件」 when it went round
  * them all, 「12 件中 7 件目で抜けた」 after a break, 「3 / 12 件目」 while it runs.
  */
-export function loopRoundsText(type: string, round: number, total: number | null, how: LoopOutcome): string {
+export function loopRoundsText(
+  type: string,
+  round: number,
+  total: number | null,
+  how: LoopOutcome,
+): string {
   const ja = locale === "ja";
-  const unit = type === "control.forEach" ? (ja ? "件" : "items") : ja ? "回" : "rounds";
+  const unit =
+    type === "control.forEach" ? (ja ? "件" : "items") : ja ? "回" : "rounds";
   const of = total === null ? "" : ja ? `${total} ${unit}中 ` : ` of ${total}`;
   if (!ja) {
-    if (how === "running") return total === null ? `Round ${round}` : `${round} / ${total}`;
-    if (how === "done") return total === null ? `${round} ${unit}` : `${round}${of}`;
+    if (how === "running")
+      return total === null ? `Round ${round}` : `${round} / ${total}`;
+    if (how === "done")
+      return total === null ? `${round} ${unit}` : `${round}${of}`;
     const at = `at ${round}${of}`;
-    return how === "left" ? `Left ${at}` : how === "failed" ? `Error ${at}` : `Stopped ${at}`;
+    return how === "left"
+      ? `Left ${at}`
+      : how === "failed"
+        ? `Error ${at}`
+        : `Stopped ${at}`;
   }
-  if (how === "running") return total === null ? `${round} ${unit}目` : `${round} / ${total} ${unit}目`;
+  if (how === "running")
+    return total === null
+      ? `${round} ${unit}目`
+      : `${round} / ${total} ${unit}目`;
   if (how === "done") return `${of}${round} ${unit}`;
   const at = `${of}${round} ${unit}目で`;
-  return how === "left" ? `${at}抜けた` : how === "failed" ? `${at}エラー` : `${at}中止`;
+  return how === "left"
+    ? `${at}抜けた`
+    : how === "failed"
+      ? `${at}エラー`
+      : `${at}中止`;
 }
 
 /** What the head of a frame says after its name: the condition of an if, the value a switch compares, what a loop walks over. */
@@ -223,7 +289,10 @@ export function headSummary(step: Step): string {
     case "control.forEach":
     case "control.repeat":
     case "control.while":
-      return blockLabel(step, "body", "").replace(/\{\{\s*([\s\S]*?)\s*\}\}/g, "$1");
+      return blockLabel(step, "body", "").replace(
+        /\{\{\s*([\s\S]*?)\s*\}\}/g,
+        "$1",
+      );
     default:
       return "";
   }
@@ -239,8 +308,10 @@ function plainExpr(value: unknown): string {
 /** On the chart to read, beside a guard (flow/chart.ts): where the flow goes when it leaves the line there. */
 export function guardOutcome(stop: Step): string {
   const ja = locale === "ja";
-  if (stop.type === "control.continue") return ja ? "次の回へ進む" : "On to the next round";
-  if (stop.type === "control.break") return ja ? "繰り返しを抜ける" : "Leave the loop";
+  if (stop.type === "control.continue")
+    return ja ? "次の回へ進む" : "On to the next round";
+  if (stop.type === "control.break")
+    return ja ? "繰り返しを抜ける" : "Leave the loop";
   return ja ? "失敗として終える" : "Stop as failed";
 }
 
@@ -249,7 +320,8 @@ export function chartWords() {
   const ja = locale === "ja";
   return {
     /** After a band's question and answer: "はい のときだけ". */
-    onlyWhen: (answer: string) => (ja ? `${answer} のときだけ` : `only when ${answer}`),
+    onlyWhen: (answer: string) =>
+      ja ? `${answer} のときだけ` : `only when ${answer}`,
     other: ja ? "その他のとき" : "Otherwise",
     always: ja ? "最後に必ず" : "Always at the end",
     failed: ja ? "失敗したとき" : "On failure",
@@ -262,13 +334,25 @@ export function chartWords() {
     /** Beside a loop's name: how it goes round. */
     loopNote: (step: Step): string => {
       const p = (step.params ?? {}) as Record<string, unknown>;
-      if (step.type === "control.forEach") return ja ? "1 件ずつ繰り返す" : "for each item";
-      if (step.type === "control.repeat") return typeof p.count === "number" ? (ja ? `${p.count} 回繰り返す` : `${p.count} times`) : ja ? "決まった回数繰り返す" : "a set number of times";
-      if (step.type === "wait.until") return ja ? "条件を満たすまで確かめる" : "until the condition holds";
+      if (step.type === "control.forEach")
+        return ja ? "1 件ずつ繰り返す" : "for each item";
+      if (step.type === "control.repeat")
+        return typeof p.count === "number"
+          ? ja
+            ? `${p.count} 回繰り返す`
+            : `${p.count} times`
+          : ja
+            ? "決まった回数繰り返す"
+            : "a set number of times";
+      if (step.type === "wait.until")
+        return ja ? "条件を満たすまで確かめる" : "until the condition holds";
       return ja ? "条件を満たす間繰り返す" : "while the condition holds";
     },
     /** Beside a group's name, when it is tried again on failure: `n` tries in all. */
-    tries: (n: number) => (ja ? `うまくいかなければやり直す（${n} 回まで）` : `tried again on failure (up to ${n} times)`),
+    tries: (n: number) =>
+      ja
+        ? `うまくいかなければやり直す（${n} 回まで）`
+        : `tried again on failure (up to ${n} times)`,
     /** The frame round what a failure is caught from, when it has no name. */
     guarded: ja ? "失敗に備える" : "Guarded",
     zoomIn: ja ? "拡大" : "Zoom in",
@@ -276,8 +360,25 @@ export function chartWords() {
     fit: ja ? "全体を表示" : "Fit",
     actual: ja ? "100% で表示" : "Actual size",
     addHere: ja ? "ここに手順を追加" : "Add a step here",
+    /** The bar at the foot of the map, and its button for the map in small. */
+    size: ja ? "図の大きさ" : "Size of the chart",
+    map: ja ? "地図" : "Map",
+    /** On a bracket that goes on from the row before: where what repeats ends. */
+    repeatTo: ja ? "ここまで" : "Up to here",
+    emptyMap: ja
+      ? "まだ手順がありません。左の AI に頼むか、最初の手順を足すと、ここに図ができます。"
+      : "There are no steps yet. Ask the AI on the left, or add the first step, and the chart appears here.",
+    addFirst: ja ? "最初の手順を足す" : "Add the first step",
+    aiMaking: ja
+      ? "AI がフローを作っています。作り終わるまで図からは直せません"
+      : "The AI is making the flow. It can be changed here once it is done",
+    runningAt: (n: number, all: number) =>
+      ja ? `実行中　手順 ${n} / ${all}` : `Running: step ${n} of ${all}`,
     /** Where branches part to run at the same time; `limit` when only so many run at once. */
-    together: (limit?: number) => (ja ? `同時に進める${limit ? `（${limit} つまで）` : ""}` : `At the same time${limit ? ` (up to ${limit})` : ""}`),
+    together: (limit?: number) =>
+      ja
+        ? `同時に進める${limit ? `（${limit} つまで）` : ""}`
+        : `At the same time${limit ? ` (up to ${limit})` : ""}`,
     /** After a loop's name, when its rounds run at the same time. */
     atOnce: (n: number) => (ja ? `${n} 件ずつ同時に` : `${n} at a time`),
     /** What the system does at a step (lib/systemFacts.ts): the name of each kind, then its value. */
@@ -293,7 +394,8 @@ export function chartWords() {
       take: ja ? "受け取り" : "Takes",
       give: ja ? "引き渡し" : "Gives",
     },
-    upTo: (seconds: number) => (ja ? `最大 ${seconds} 秒` : `up to ${seconds} s`),
+    upTo: (seconds: number) =>
+      ja ? `最大 ${seconds} 秒` : `up to ${seconds} s`,
     attempts: (n: number) => (ja ? `${n} 回まで` : `up to ${n} times`),
     fromStep: (n: string) => (ja ? `${n} から` : `from ${n}`),
     toSteps: (n: string) => (ja ? `${n} へ` : `to ${n}`),
