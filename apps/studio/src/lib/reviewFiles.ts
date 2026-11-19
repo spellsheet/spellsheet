@@ -5,7 +5,7 @@ import type { Effect } from "./effects";
 import { fillTarget, type InputRow } from "./approval";
 import { filePath } from "./preview";
 
-export type UsedKind = "inputFile" | "inputFolder" | "outputFile" | "outputFolder" | "site" | "service" | "other";
+export type UsedKind = "inputFile" | "inputFolder" | "outputFile" | "outputFolder" | "site" | "app" | "service" | "other";
 
 export type UsedRow = {
   kind: UsedKind;
@@ -31,7 +31,10 @@ const COMMAND = /\s|\.(exe|bat|cmd|ps1|sh)$/i;
 
 function kindOf(e: Effect, target: string): UsedKind {
   if (e.external) return "service";
+  if (e.program) return "app";
   if (/^https?:/i.test(target)) return "site";
+  // A file whose name is only known while it runs is still a file: `output/請求書_{{ 顧客 }}.docx`.
+  if (target.includes("{{") && EXTENSION.test(target.trim())) return e.reads ? "inputFile" : "outputFile";
   if (!target || target.includes("{{") || (COMMAND.test(target) && !EXTENSION.test(target.replace(/\.(exe|bat|cmd|ps1|sh)$/i, "")))) return target.includes("{{") && e.reads ? "inputFile" : "other";
   if (EXTENSION.test(target)) return e.reads ? "inputFile" : "outputFile";
   return e.reads ? "inputFolder" : "outputFolder";
@@ -57,7 +60,7 @@ export function usedRows(effects: Effect[], values: InputRow[]): UsedRow[] {
         status: e.status,
         stepId: e.stepId,
         ...(e.external ? { external: e.external } : {}),
-        preview: kind === "inputFile" || kind === "outputFile" ? filePath(target) : null,
+        preview: (kind === "inputFile" || kind === "outputFile") && !target.includes("{{") ? filePath(target) : null,
         atRun: target.includes("{{"),
       });
       continue;
@@ -73,7 +76,7 @@ export function usedRows(effects: Effect[], values: InputRow[]): UsedRow[] {
     row.danger ||= e.risk === "dangerous";
     if (STATUS_ORDER.indexOf(e.status) < STATUS_ORDER.indexOf(row.status)) row.status = e.status;
   }
-  const order: UsedKind[] = ["inputFolder", "inputFile", "outputFolder", "outputFile", "site", "service", "other"];
+  const order: UsedKind[] = ["inputFolder", "inputFile", "outputFolder", "outputFile", "site", "app", "service", "other"];
   const all = [...rows.values()];
   // A file read one at a time out of a folder the table already names says nothing more.
   const named = all.some((r) => !r.atRun && (r.kind === "inputFile" || r.kind === "inputFolder"));

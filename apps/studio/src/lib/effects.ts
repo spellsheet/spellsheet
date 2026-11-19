@@ -21,16 +21,23 @@ export type Effect = {
   status: EffectStatus;
   /** Data an extension's node sends to a service outside the PC, as its manifest declares. */
   external?: { service: string; data: string };
+  /** It starts a program or runs a command (the target is the program, not a place). */
+  program?: boolean;
 };
 
 /** Steps that only move around inside a window or ask the person: not effects outside. */
 const INSIDE = /^(browser\.(?!(?:open|attach|download|upload)$)|desktop\.(?!launch$)|dialog\.|clipboard\.|control\.|variable\.|log\.|flow\.|wait\.|flow\.call$|config\.read$)/;
 
+/** Steps that start a program or run a command line. */
+const PROGRAM = /^(process\.|system\.process|desktop\.launch$|shell\.)/;
+
 const TARGET_PARAMS = ["url", "command", "program", "path", "to"];
 
 function targetOf(step: Step, def: StepTypeDef | undefined): string | null {
   const params = step.params ?? {};
-  for (const key of [...(def?.pathParams ?? []), ...TARGET_PARAMS]) {
+  // A template is only read: the file made from it is what the step changes.
+  const keys = [...(def?.pathParams ?? []), ...TARGET_PARAMS];
+  for (const key of [...keys.filter((k) => k !== "template"), ...keys.filter((k) => k === "template")]) {
     const value = params[key];
     if (typeof value === "string" && value.trim()) return value.trim();
     if (Array.isArray(value) && value.length > 0) return value.filter((v) => typeof v === "string").join(", ");
@@ -55,6 +62,7 @@ export function effectOf(step: Step, def: StepTypeDef | undefined, status: Effec
     reads: risk === "safe" && !external,
     status,
     ...(external ? { external: { service: external.service, data: external.data } } : {}),
+    ...(PROGRAM.test(step.type) || (!!target && [step.params?.command, step.params?.program].includes(target)) ? { program: true } : {}),
   };
 }
 

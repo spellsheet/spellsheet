@@ -513,8 +513,10 @@ export function createAgentStore(api: AgentApi): StoreApi<AgentState> {
         if (isBusy(target)) {
           // Written while the AI works: it reads this with its next tool
           // call, without being stopped.
-          const person = { role: "person" as const, id: nextId("item"), text, context, flow, note: "waiting" as const };
-          update(chatId, (c) => ({ ...c, items: [...c.items, person] }));
+          // An answer to a question card the AI left closes the card too.
+          const answers = waitsForChoice(target.items);
+          const person = { role: "person" as const, id: nextId("item"), text, context, flow, note: "waiting" as const, ...(answers ? { answers } : {}) };
+          update(chatId, (c) => ({ ...c, items: [...answerChoices(c.items, text), person] }));
           post(chatId, person);
           return true;
         }

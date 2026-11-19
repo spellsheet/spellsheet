@@ -23,6 +23,16 @@ use spellsheet_core::{CoreError, CoreResult, FlowId};
 pub const SCHEDULES_FILE: &str = "schedules.json";
 pub const SCHEDULES_FORMAT_VERSION: u32 = 1;
 
+/// One day of a schedule's coming runs: how many, and the first few times.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayRuns {
+    /// The local day, "2026-11-17".
+    pub date: String,
+    pub count: usize,
+    pub times: Vec<String>,
+}
+
 /// When a schedule fires.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(
@@ -383,6 +393,45 @@ impl When {
         }
     }
 
+    /// When it fires from now through the next `days` days, day by day:
+    /// how many times, and the first few (RFC 3339 with the local offset).
+    /// Every time is counted, so a schedule that runs every minute still
+    /// shows on each day of the week Studio draws.
+    pub fn upcoming(&self, days: i64, calendar: &Calendar, shown: usize) -> Vec<DayRuns> {
+        // Every minute for a week, with room: past this something is wrong.
+        const MOST: usize = 20_000;
+        let now = Zoned::now();
+        let Ok(until) = now.checked_add(jiff::Span::new().days(days)) else {
+            return Vec::new();
+        };
+        let mut out: Vec<DayRuns> = Vec::new();
+        let mut after = now;
+        let mut seen = 0;
+        while seen < MOST {
+            let Some(at) = self.next_after(&after, calendar).filter(|at| *at <= until) else {
+                break;
+            };
+            seen += 1;
+            let text = at.timestamp().display_with_offset(at.offset()).to_string();
+            let date = at.date().to_string();
+            match out.last_mut() {
+                Some(day) if day.date == date => {
+                    day.count += 1;
+                    if day.times.len() < shown {
+                        day.times.push(text);
+                    }
+                }
+                _ => out.push(DayRuns {
+                    date,
+                    count: 1,
+                    times: vec![text],
+                }),
+            }
+            after = at;
+        }
+        out
+    }
+
     /// The first time after `after` it fires (`None`: never again, or a
     /// file trigger, which has no times), with the company's `calendar`.
     pub fn next_after(&self, after: &Zoned, calendar: &Calendar) -> Option<Zoned> {
@@ -624,6 +673,35 @@ mod tests {
             next(&day31, "2026-11-01T00:00").as_deref(),
             Some("2026-11-30 Mon 18:00")
         );
+    }
+
+    #[test]
+    fn upcoming_counts_every_run_of_the_week_by_day() {
+        let daily = When::Daily {
+            at: "08:00".into(),
+            days: vec![],
+            skip_holidays: false,
+        };
+        let week = daily.upcoming(7, &Calendar::default(), 3);
+        assert!((7..=8).contains(&week.len()), "{week:?}");
+        assert!(week.windows(2).all(|w| w[0].date < w[1].date));
+        assert!(
+            week.iter()
+                .all(|d| d.count == 1 && d.times[0].contains("T08:00:00"))
+        );
+        let often = When::Every {
+            minutes: 1,
+            from: None,
+            to: None,
+            days: vec![],
+            skip_holidays: false,
+        };
+        let week = often.upcoming(7, &Calendar::default(), 3);
+        // Each day of the week shows, not just the first few hours.
+        assert!(week.len() >= 7, "{}", week.len());
+        assert_eq!(week[1].count, 24 * 60);
+        assert_eq!(week[1].times.len(), 3);
+        assert_eq!(week.iter().map(|d| d.count).sum::<usize>(), 7 * 24 * 60);
     }
 
     #[test]

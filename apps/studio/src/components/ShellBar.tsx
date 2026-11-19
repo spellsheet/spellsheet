@@ -6,7 +6,7 @@
 import { AppWindow, Blocks, CalendarClock, Check, ChevronDown, ClipboardList, Inbox, KeyRound, LayoutList, type LucideIcon, MessageSquareText, Moon, Play, Plus, Settings2, Sparkles, Workflow } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { activity, anyBusy, useAgent, useAgentApi } from "../agent";
+import { activity, anyBusy, isBusy, useAgent, useAgentApi, waitsForChoice } from "../agent";
 import { useStudio, useStudioApi } from "../context";
 import { type Locale, setLocale, t, useLocale } from "../lib/i18n";
 import { consult } from "../lib/inventory";
@@ -202,6 +202,9 @@ export function AiButton() {
   const name = useAgent((s) => s.info?.name ?? "AI");
   const tool = useAgent((s) => activity(s)?.tool ?? null);
   const working = useAgent((s) => activity(s) !== null);
+  // A question card waits for the person: that is what to say, not the work around it.
+  // Only a question being asked now: one left in an old conversation is not news.
+  const asking = useAgent((s) => s.chats.some((c) => (isBusy(c) || c.unread) && waitsForChoice(c.items)));
   const what = working && tool ? ((t.agent.tools as Record<string, string>)[tool] ?? tool) : null;
   return (
     <button
@@ -219,12 +222,17 @@ export function AiButton() {
       {working ? (
         <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-normal text-slate-500">
           <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-brand-500 motion-reduce:animate-none" />
-          <span className="max-w-48 truncate">{t.bar.aiWorking(name, what)}</span>
+          <span className="max-w-48 truncate">{asking ? t.drafting.question : t.bar.aiWorking(name, what)}</span>
+        </span>
+      ) : asking ? (
+        <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-normal text-slate-500">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+          <span className="max-w-48 truncate">{t.drafting.question}</span>
         </span>
       ) : (
         (news || busy) && <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
       )}
-      {!working && <span className={`${KBD} ml-0.5 ${open ? "border-brand-100 bg-brand-50 text-brand-600" : ""}`}>Ctrl J</span>}
+      {!working && !asking && <span className={`${KBD} ml-0.5 ${open ? "border-brand-100 bg-brand-50 text-brand-600" : ""}`}>Ctrl J</span>}
     </button>
   );
 }

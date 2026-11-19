@@ -1,10 +1,13 @@
 // The parts of the review report a person judges by, without reading the
 // flow: the files the trial run wrote (their real content), the values it
 // returned, and the table of files and systems the flow works with.
+import { ArchiveView, DocumentView } from "./DocumentView";
 import { AlertTriangle, CloudUpload, ExternalLink } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFail, useStudio } from "../context";
 import { formatValue } from "../lib/changes";
+import { shownPath } from "../lib/flowPath";
+import { shortText } from "./ValueView";
 import { locale, t } from "../lib/i18n";
 import { baseName, type FilePreview, loadPreview, type Picture } from "../lib/preview";
 import type { UsedRow } from "../lib/reviewFiles";
@@ -123,6 +126,10 @@ export function FileBox({
           {preview.text}
           {preview.more && <span className="block font-sans text-[11.5px] text-slate-500">{t.desk.fileMore}</span>}
         </pre>
+      ) : preview.kind === "document" ? (
+        <DocumentView preview={preview} />
+      ) : preview.kind === "archive" ? (
+        <ArchiveView preview={preview} />
       ) : preview.kind === "image" && loaded?.picture ? (
         <img src={loaded.picture.src} alt={baseName(path)} className="max-h-[320px] w-auto max-w-full" />
       ) : (
@@ -130,6 +137,24 @@ export function FileBox({
       )}
     </div>
   );
+}
+
+/** One returned value as it reads: numbers grouped, a list one item a line, a path in the flow's folder by its short name. */
+function OutputValue({ value }: { value: unknown }) {
+  const one = (v: unknown): string =>
+    typeof v === "number" ? v.toLocaleString(locale === "ja" ? "ja-JP" : "en-US") : typeof v === "string" ? shownPath(v) : v !== null && typeof v === "object" ? shortText(v) : formatValue(v);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="font-normal text-slate-500">{t.values.zero}</span>;
+    return (
+      <ul className="space-y-0.5 font-normal">
+        {value.slice(0, 10).map((v, i) => (
+          <li key={i}>{one(v)}</li>
+        ))}
+        {value.length > 10 && <li className="text-slate-500">{t.values.more(value.length - 10)}</li>}
+      </ul>
+    );
+  }
+  return <>{one(value)}</>;
 }
 
 /** The values the trial run returned, by what each one is. */
@@ -149,7 +174,7 @@ export function OutputValues({ outputs }: { outputs: [string, unknown][] }) {
                 {label(name) && <span className="ml-2 font-mono text-[11px] text-slate-400">{name}</span>}
               </th>
               <td className="px-3 py-1.5 align-top font-semibold break-all tabular-nums">
-                {typeof value === "number" ? value.toLocaleString(locale === "ja" ? "ja-JP" : "en-US") : formatValue(value)}
+                <OutputValue value={value} />
               </td>
             </tr>
           ))}

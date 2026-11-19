@@ -128,6 +128,21 @@ fn load(bytes: &[u8], password: Option<&str>, shown: &str) -> Result<Document, S
     Ok(doc)
 }
 
+/// The text of the first `max` pages of a PDF and its page count, for a preview.
+pub fn preview_pages(bytes: &[u8], max: usize) -> Result<(Vec<String>, usize), String> {
+    let doc = load(bytes, None, "").map_err(|e| e.message)?;
+    let pages: Vec<u32> = doc.get_pages().into_keys().collect();
+    let count = pages.len();
+    let mut out = Vec::new();
+    for number in pages.into_iter().take(max) {
+        let mut text = String::new();
+        pdf_extract::output_doc_page(&doc, &mut PlainTextOutput::new(&mut text), number)
+            .map_err(|e| e.to_string())?;
+        out.push(text);
+    }
+    Ok((out, count))
+}
+
 /// The text of every page, in page order.
 fn read_pages(bytes: &[u8], password: Option<&str>, shown: &str) -> Result<Vec<String>, StepError> {
     let fail =

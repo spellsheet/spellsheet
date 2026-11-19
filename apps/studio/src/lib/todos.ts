@@ -125,6 +125,11 @@ export function personTodos(
   }
   if (files) {
     const have = new Set(files.files.map((f) => f.path.toLowerCase()));
+    // A folder is there when a file is in it (the list holds files only).
+    for (const f of files.files) {
+      const parts = f.path.toLowerCase().split("/");
+      for (let i = 1; i < parts.length; i++) have.add(parts.slice(0, i).join("/"));
+    }
     const missing = new Map<string, string[]>();
     for (const step of steps) {
       const def = defs.get(step.type);

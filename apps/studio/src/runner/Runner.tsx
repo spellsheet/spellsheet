@@ -1,7 +1,7 @@
 // The run window (competitive-gaps.md #17): pick a published flow, fill
 // in the form made from its inputs, run it, and see what came out. Nothing
 // here edits a flow; that stays in Studio.
-import type { ProjectFile, RunEventEnvelope, RunReport, StepTypeDef } from "@spellsheet/schema";
+import type { ProjectFile, RunEventEnvelope, RunReport, Step, StepTypeDef } from "@spellsheet/schema";
 import { Check, Circle, Copy, FileText, FolderOpen, Hand, Loader2, Play, Search, Square, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HoverPreview } from "../components/HoverPreview";
@@ -23,6 +23,9 @@ const publishedText = (at: string) => {
     : d.toLocaleString(t.runner.numberLocale, { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 };
 import { FieldRow } from "./FieldRow";
+import { buildManual } from "../lib/manual";
+import { FlowGlance } from "../components/sheet/FlowGlance";
+import { StepFile } from "../components/sheet/stepFile";
 import { collect, fieldsOf, formatValue, initialValues, isOutput, labelOf, type Values } from "./form";
 import { progress, type TopState } from "./progress";
 
@@ -155,6 +158,8 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
   const defMap = useMemo(() => new Map(defs.map((d) => [d.type, d])), [defs]);
   // Read again once the step types arrive: a file path input gets its picker.
   const fields = useMemo(() => (item ? fieldsOf(item.flow, defMap) : []), [formKey, defMap]);
+  // What the flow takes in, does and gives back, as the top of its sheet in Writer says it.
+  const glance = useMemo(() => (item && defs.length > 0 ? buildManual(item.flow, defMap, null) : null), [formKey, defMap]);
   const shownKey = useRef("");
   useEffect(() => {
     const fresh = initialValues(fields);
@@ -303,6 +308,13 @@ export function Runner({ backend = runnerApi }: { backend?: RunnerApi }) {
                   }}
                   className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-2"
                 >
+                  {glance && (
+                    <div className="@container/paper">
+                      <FlowGlance doc={glance} className="mt-0" />
+                    </div>
+                  )}
+                  <LastFailure item={item} flowSteps={item.flow.steps ?? []} backend={backend} />
+                  {fields.length > 0 && glance && <h2 className="pt-1 text-[12.5px] font-semibold text-slate-600">{t.runner.inputsHead}</h2>}
                   {fields.length === 0 && <p className="text-[12.5px] text-slate-500">{t.runner.noInputs}</p>}
                   {fields.map((f) => (
                     <FieldRow key={f.name} field={f} value={values[f.name] ?? f.initial} error={errors[f.name]} onChange={(v) => setValues((s) => ({ ...s, [f.name]: v }))} onPick={backend.pick} />
@@ -489,8 +501,38 @@ function Result({
               </li>
             ))}
           </ul>
+          {/* The first files themselves, small: the table, the document, the picture. */}
+          <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
+            {files.slice(0, 4).map((f) => (
+              <StepFile key={f.path} flowId={item.flow.id} path={f.path} stamp={report?.finishedAt ?? ""} />
+            ))}
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Why the last run stopped, when it did: read from its record, in words. */
+function LastFailure({ item, flowSteps, backend }: { item: RunnerItem; flowSteps: Step[]; backend: RunnerApi }) {
+  const last = item.lastRun;
+  const [error, setError] = useState<RunReport["error"] | null>(null);
+  useEffect(() => {
+    setError(null);
+    if (last?.status !== "failed") return;
+    let live = true;
+    backend.report(last.runId).then((r) => live && setError(r?.error ?? null), () => {});
+    return () => {
+      live = false;
+    };
+  }, [last?.runId, last?.status, backend]);
+  if (last?.status !== "failed") return null;
+  const explained = error ? explainError(error, error.stepId ? findStep(flowSteps, error.stepId) : null) : null;
+  return (
+    <div className="rounded-lg border border-shu-100 bg-shu-50 px-3 py-2 text-[12.5px]" data-last-failure>
+      <div className="font-semibold text-shu-600">{t.runner.lastFailed(relativeTime(last.finishedAt))}</div>
+      {explained && <div className="mt-0.5 text-ink">{explained.what}</div>}
+      {explained?.todo && <div className="text-slate-600">{explained.todo}</div>}
     </div>
   );
 }

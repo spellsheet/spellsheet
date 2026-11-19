@@ -21,6 +21,8 @@ const defs = new Map(
     def("browser.download", "dangerous", ["path", "folder"]),
     def("browser.upload", "dangerous", ["path"]),
     def("log.message", "safe"),
+    def("word.fillTemplate", "interactive", ["template", "path"]),
+    def("process.run", "dangerous"),
   ].map((d) => [d.type, d] as const),
 );
 
@@ -40,6 +42,18 @@ describe("effects", () => {
       ["added", "file.writeText", "output/b.txt"],
       ["same", "browser.open", "https://orders.example.com"],
       ["same", "file.readCsv", "input/a.csv"],
+    ]);
+  });
+
+  it("names the file made from a template, and a program a step starts", () => {
+    const steps: Step[] = [
+      { id: "w", type: "word.fillTemplate", params: { template: "templates/ひな形.docx", path: "output/請求書.docx" } },
+      { id: "p", type: "process.run", params: { program: "cmd", args: ["/c", "ver"] } },
+    ];
+    const list = effects(steps, new Map(), [], defs);
+    expect(list.map((e) => [e.stepId, e.target, e.program ?? false])).toEqual([
+      ["p", "cmd", true],
+      ["w", "output/請求書.docx", false],
     ]);
   });
 

@@ -115,10 +115,11 @@ export function ReviewInbox({ onCollapse }: { onCollapse?: () => void }) {
             </button>
           )}
         </div>
-        <div className="text-[11px] leading-relaxed text-slate-400">{t.desk.hint}</div>
+        {inbox.length > 0 && <div className="text-[11px] leading-relaxed text-slate-400">{t.desk.hint}</div>}
       </div>
       <ul className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
-        {inbox.filter((i) => !i.waiting).length === 0 && (
+        {/* Nothing at all: the page beside says so once. */}
+        {inbox.length > 0 && inbox.every((i) => i.waiting) && (
           <li className="mx-1 rounded-lg border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">
             {t.desk.empty}
           </li>
@@ -379,6 +380,8 @@ export function ReviewReport() {
   const statusWord = (status: string) => (t.runLog.status as Record<string, string>)[status] ?? status;
   const when = new Date(newest.at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   // A small change nobody tried and the AI has no question about reads best from what changed.
+  // An import or a command is not the AI: its change is not worded as the AI's.
+  const byAi = newest.actor.kind === "mcp" || newest.actor.kind === "chat";
   const changesFirst = !summary.created && !r.hasResult && r.checks.length === 0;
   let n = 0;
   const resultAnswer = answers[r.resultKey];
@@ -442,7 +445,7 @@ export function ReviewReport() {
           />
           {said.length > 0 && (
             <blockquote className="border-l-[3px] border-brand-100 pl-3 text-[13.5px] leading-[1.7]">
-              <div className="text-[12px] text-slate-500">{t.desk.explanationLead}</div>
+              <div className="text-[12px] text-slate-500">{byAi ? t.desk.explanationLead : t.desk.explanationOther}</div>
               {said.map((line) => (
                 <p key={line} className="whitespace-pre-wrap">
                   {line}
@@ -450,7 +453,7 @@ export function ReviewReport() {
               ))}
             </blockquote>
           )}
-          <p className="mt-3 text-[13.5px] leading-[1.7] text-slate-500">{t.desk.lead}</p>
+          <p className="mt-3 text-[13.5px] leading-[1.7] text-slate-500">{byAi ? t.desk.lead : t.desk.leadOther}</p>
           {r.feedback && (
             <div className="mt-4">
               <FeedbackBox feedback={r.feedback} fixedAfter={newest.revision > r.feedback.revision} />

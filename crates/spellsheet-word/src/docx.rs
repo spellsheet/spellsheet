@@ -265,6 +265,73 @@ fn elements(xml: &str, tag: &str) -> Vec<(usize, usize)> {
     out
 }
 
+/// One piece of a document's body as a preview shows it, in reading order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Block {
+    /// A paragraph; `heading` when it is styled as a title or heading, or is bold and large.
+    Paragraph { text: String, heading: bool },
+    /// A table: rows of cell texts.
+    Table { rows: Vec<Vec<String>> },
+}
+
+/// The body's paragraphs and tables in order (tables count as one block).
+pub fn blocks(xml: &str) -> Vec<Block> {
+    let body = xml.find("<w:body").map_or(xml, |at| &xml[at..]);
+    let found = elements(body, "w:tbl");
+    let mut out = Vec::new();
+    let mut i = 0;
+    for (ts, te) in found
+        .iter()
+        .copied()
+        .chain(std::iter::once((body.len(), body.len())))
+    {
+        for (ps, pe) in elements(&body[i..ts], "w:p") {
+            let part = &body[i + ps..i + pe];
+            let text = plain_text(part);
+            out.push(Block::Paragraph {
+                heading: is_heading(part),
+                text,
+            });
+        }
+        if ts < body.len() {
+            let rows = tables(&body[ts..te]).into_iter().next().unwrap_or_default();
+            out.push(Block::Table { rows });
+        }
+        i = te;
+    }
+    out
+}
+
+/// A title or heading style, or a bold run of 14pt or more.
+fn is_heading(paragraph: &str) -> bool {
+    if let Some(at) = paragraph.find("<w:pStyle") {
+        let style = &paragraph[at..paragraph[at..]
+            .find('>')
+            .map_or(paragraph.len(), |e| at + e)];
+        let lower = style.to_lowercase();
+        if lower.contains("heading")
+            || lower.contains("title")
+            || style.contains("見出し")
+            || style.contains("表題")
+        {
+            return true;
+        }
+    }
+    let bold = paragraph.contains("<w:b/>")
+        || paragraph.contains("<w:b ") && !paragraph.contains("<w:b w:val=\"0\"");
+    let large = paragraph
+        .match_indices("<w:sz w:val=\"")
+        .filter_map(|(at, m)| {
+            paragraph[at + m.len()..]
+                .split('"')
+                .next()?
+                .parse::<u32>()
+                .ok()
+        })
+        .any(|half_points| half_points >= 28);
+    bold && large
+}
+
 /// The tables of the body: each a list of rows, each a list of cell texts
 /// (paragraphs of a cell joined with line breaks). A table inside a cell is
 /// part of that cell's text.

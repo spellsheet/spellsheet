@@ -14,7 +14,8 @@ describe("previewSource", () => {
   it("leaves paths it cannot read alone", () => {
     expect(filePath("output/{{ name }}.png")).toBeNull();
     expect(filePath("https://example.com/a.png")).toBeNull();
-    expect(filePath("archive.zip")).toBeNull();
+    expect(filePath("setup.exe")).toBeNull();
+    expect(filePath("archive.zip")).toBe("archive.zip");
     expect(filePath("a.png\nb.png")).toBeNull();
     expect(previewSource(42)).toBeNull();
     expect(previewSource("hello")).toBeNull();
@@ -62,6 +63,15 @@ describe("loadPreview", () => {
     await loadPreview("f2", "input/a.csv");
     expect(reads).toBe(2);
     expect((await loadPreview("f1", "bad.csv")).preview).toEqual({ kind: "unreadable", message: "denied" });
+  });
+
+  it("reads again when asked for a fresh read, and keeps that one", async () => {
+    let reads = 0;
+    setPreviewReader(async () => (++reads === 1 ? { kind: "missing" } : { kind: "table", columns: ["a"], rows: [["1"]], more: false }));
+    expect((await loadPreview("f1", "output/new.csv")).preview.kind).toBe("missing");
+    expect((await loadPreview("f1", "output/new.csv", undefined, true)).preview.kind).toBe("table");
+    expect((await loadPreview("f1", "output/new.csv")).preview.kind).toBe("table");
+    expect(reads).toBe(2);
   });
 
   it("keeps the shrunk picture, not the file's bytes", async () => {

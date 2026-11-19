@@ -11,12 +11,8 @@ import {
   CircleMinus,
   CirclePause,
   CircleX,
-  ArrowRight,
   Download,
   EyeOff,
-  FileSpreadsheet,
-  FileText,
-  Globe,
   History,
   Play,
   Plus,
@@ -77,6 +73,8 @@ import { useFlowBusy } from "../../lib/useFlowBusy";
 import { useStepMenu } from "../menus";
 import { ChartBody } from "../chart/ChartBody";
 import { StepInspector } from "../inspector/StepInspector";
+import { FlowGlance } from "./FlowGlance";
+import { StepFile, fileSteps } from "./stepFile";
 import {
   ExportDialog,
   MaskEditor,
@@ -254,53 +252,6 @@ const countSteps = (items: ManualItem[]): number =>
     0,
   );
 
-/** A file, a site or a value the flow takes in or gives back, as a small card. */
-function Thing({
-  name,
-  kind,
-  out = false,
-}: {
-  name: string;
-  kind: "file" | "site" | "value";
-  out?: boolean;
-}) {
-  const Icon =
-    kind === "site"
-      ? Globe
-      : /\.(xlsx?|xlsm|csv)$/i.test(name)
-        ? FileSpreadsheet
-        : FileText;
-  // Only a file's name is split from its folder: a value's words may hold a slash ("A / B").
-  const slash =
-    kind === "file"
-      ? Math.max(name.lastIndexOf("/"), name.lastIndexOf("\\"))
-      : -1;
-  return (
-    <li
-      className={`flex min-w-0 items-center gap-2.5 rounded-[4px] border bg-sheet px-2.5 py-2 ${out ? "border-[var(--color-role-output)] shadow-[inset_3px_0_0_var(--color-role-output)]" : "border-slate-300"}`}
-    >
-      {kind !== "value" && (
-        <Icon
-          size={18}
-          strokeWidth={1.5}
-          aria-hidden="true"
-          className={`shrink-0 ${Icon === FileSpreadsheet ? "text-moegi-600" : "text-slate-500"}`}
-        />
-      )}
-      <span className="min-w-0">
-        <b className="block text-[13.5px] leading-[1.4] font-semibold break-words text-ink">
-          {slash >= 0 ? name.slice(slash + 1) : name}
-        </b>
-        {slash >= 0 && (
-          <small className="block text-[11.5px] leading-[1.4] text-slate-500">
-            {t.sheetView.inFolder(name.slice(0, slash))}
-          </small>
-        )}
-      </span>
-    </li>
-  );
-}
-
 /** The flow's last run from anywhere (Writer, Runner, a schedule), read again when one here ends. */
 function useLatestRun(flowId: string | undefined): FlowRun | null {
   const ended = useStudio((s) =>
@@ -428,17 +379,7 @@ function Head({
   const failure = doc.chapters
     .filter((c) => c.role === "failure")
     .flatMap((c) => texts(c.items));
-  const work = doc.chapters.filter((c) => !c.role);
   const particulars = particularsOf(doc, edition, manifest, latest);
-  const ins = [
-    ...doc.uses.inputFiles.map((name) => ({ name, kind: "file" as const })),
-    ...doc.uses.apps.map((name) => ({ name, kind: "site" as const })),
-    ...doc.inputs.map((name) => ({ name, kind: "value" as const })),
-  ];
-  const outs = [
-    ...doc.uses.outputFiles.map((name) => ({ name, kind: "file" as const })),
-    ...doc.outputs.map((name) => ({ name, kind: "value" as const })),
-  ];
   const also = [
     {
       label: t.project.shelves.templates ?? "",
@@ -452,16 +393,6 @@ function Head({
     { label: w.schedule, text: when.join(w.and) },
     { label: w.onFailure, text: failure.join(w.and) },
   ].filter((r) => r.text !== "");
-  const CAP =
-    "mb-2 text-[11.5px] font-semibold tracking-[0.06em] text-slate-600";
-  const arrow = (
-    <ArrowRight
-      size={22}
-      strokeWidth={1.5}
-      aria-hidden="true"
-      className="mx-auto hidden shrink-0 text-slate-400 @[52rem]/paper:block"
-    />
-  );
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-5">
@@ -496,57 +427,7 @@ function Head({
           {actions}
         </div>
       </div>
-      {!short && (ins.length > 0 || outs.length > 0) && work.length > 0 && (
-        <div className="mt-6 grid gap-x-4 gap-y-4 rounded-[4px] border border-slate-200 bg-paper px-5 py-4 @[52rem]/paper:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)_auto_minmax(0,1fr)] @[52rem]/paper:items-center">
-          <div>
-            <p className={CAP}>{w.input}</p>
-            {ins.length > 0 ? (
-              <ul className="space-y-1.5">
-                {ins.map((x) => (
-                  <Thing key={`${x.kind}:${x.name}`} {...x} />
-                ))}
-              </ul>
-            ) : (
-              <p className="text-[13px] text-slate-500">{w.nothing}</p>
-            )}
-          </div>
-          {arrow}
-          <div>
-            <p className={CAP}>{w.does}</p>
-            <ol className="space-y-1.5 text-[13.5px] leading-[1.5] text-ink">
-              {work.slice(0, 5).map((c) => (
-                <li
-                  key={c.number}
-                  className="grid grid-cols-[22px_minmax(0,1fr)] items-baseline"
-                >
-                  <span className="grid size-[17px] place-items-center self-center rounded-full bg-[var(--manual-navy)] text-[10.5px] font-bold text-sheet tabular-nums">
-                    {c.number}
-                  </span>
-                  {c.title}
-                </li>
-              ))}
-              {work.length > 5 && (
-                <li className="pl-[22px] text-[12.5px] text-slate-500">
-                  {w.more(work.length - 5)}
-                </li>
-              )}
-            </ol>
-          </div>
-          {arrow}
-          <div>
-            <p className={CAP}>{w.output}</p>
-            {outs.length > 0 ? (
-              <ul className="space-y-1.5">
-                {outs.map((x) => (
-                  <Thing key={`${x.kind}:${x.name}`} {...x} out />
-                ))}
-              </ul>
-            ) : (
-              <p className="text-[13px] text-slate-500">{w.nothing}</p>
-            )}
-          </div>
-        </div>
-      )}
+      {!short && <FlowGlance doc={doc} />}
       {!short && also.length > 0 && (
         <dl className="mt-3 grid grid-cols-1 overflow-hidden rounded-[4px] border border-slate-200 text-[13px] @[52rem]/paper:grid-flow-col @[52rem]/paper:auto-cols-fr @[52rem]/paper:grid-cols-none">
           {also.map((r) => (
@@ -866,6 +747,13 @@ function StepRow({
     ? [{ number: step.number, rect: step.mark, operates: step.operates }]
     : [];
   const pictured = shot && (step.mark || wholeScreen);
+  // A step on a file shows the file, as a step on a screen shows the screen.
+  const file = own && !pictured ? ctx.files.get(step.stepId) : undefined;
+  const sheet =
+    typeof (own?.params as Record<string, unknown> | undefined)?.sheet ===
+    "string"
+      ? String(own!.params!.sheet)
+      : undefined;
   return (
     <li
       className="scroll-my-24 border-t border-slate-100 py-3 first:border-t-0 @[52rem]/paper:-mr-[344px]"
@@ -926,7 +814,7 @@ function StepRow({
             <Details stepId={step.stepId} ctx={ctx} />
           )}
         </div>
-        {(pictured || changes.length > 0) && (
+        {(pictured || file || changes.length > 0) && (
           <div className="col-span-2 space-y-2.5 pl-7 @[52rem]/paper:col-span-1 @[52rem]/paper:pl-0">
             {changes.map((c) => (
               <ChangeNote
@@ -942,6 +830,14 @@ function StepRow({
                 shot={shot}
                 marks={marks}
                 pictures={ctx.pictures}
+              />
+            )}
+            {file && (
+              <StepFile
+                flowId={ctx.flowId}
+                path={file}
+                sheet={sheet}
+                stamp={ctx.stamp}
               />
             )}
           </div>
@@ -1028,6 +924,11 @@ type RowCtx = {
   onAddIn: (parentId: string | null, block: string | null) => void;
   /** The right button on a step: everything else that is done to it. */
   menu: (stepId: string) => React.MouseEventHandler;
+  flowId: string;
+  /** The file each step that first names one works on, by step. */
+  files: ReadonlyMap<string, string>;
+  /** Changes when a run ends, so files a step shows are read again. */
+  stamp: string;
 };
 
 function Item({ item, ctx }: { item: ManualItem; ctx: RowCtx }) {
@@ -1494,6 +1395,10 @@ export function SheetView({
     }
     return { of, titles: work.map((c) => c.title) };
   }, [doc, flow]);
+  const stepFiles = useMemo(
+    () => (flow ? fileSteps(flow) : new Map<string, string>()),
+    [flow],
+  );
   const changes = useMemo(() => {
     const map = new Map<string, Change[]>();
     for (const entry of pending) {
@@ -1518,6 +1423,9 @@ export function SheetView({
   };
   const ctx: RowCtx = {
     pictures,
+    flowId: flow.id,
+    files: stepFiles,
+    stamp: `${run?.runId ?? ""}|${run?.status ?? ""}`,
     picked: selection?.kind === "step" ? selection.stepId : null,
     changes,
     defs,
@@ -1553,172 +1461,171 @@ export function SheetView({
   const noSteps = (flow.steps ?? []).length === 0;
 
   return (
-    <div
-      ref={desk}
-      className={`flow-chart absolute inset-0 ${chart ? "overflow-hidden" : "overflow-auto px-5 py-7"}`}
-      data-sheet={mode}
-    >
-      {chart && (
-        <ChartBody
-          numbers={numbers}
-          stages={stages}
-          run={run}
-          onOpen={onSheet}
-          plate={
-            <>
-              <p className="text-[11px] font-bold tracking-[0.14em] text-[var(--manual-navy)]">
-                {t.sheetView.kind}
-              </p>
-              <h1 className="mt-0.5 text-[16px] leading-snug font-semibold text-balance text-ink">
-                {doc.title}
-              </h1>
-              <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-slate-500">
-                {particularsOf(
-                  doc,
-                  editionOf(published, [], day),
-                  manifest,
-                  latest,
-                ).map(([label, value]) => (
-                  <span
-                    key={label}
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap"
-                  >
-                    {label}
-                    <span className="font-medium text-ink">{value}</span>
-                  </span>
-                ))}
-              </p>
-            </>
-          }
-        />
-      )}
-      {!chart && (
-        <div className="mx-auto flex w-fit max-w-full items-start gap-6">
-          {/* As a chart the paper is as wide as the chart, and never narrower than the sheet (so it cannot be measured against, and keeps the plain margins). */}
-          <article
-            className={`${PAPER} @container/paper w-[980px] max-w-full min-w-0`}
-          >
-            <header className="relative px-10 pt-12 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
-              <Stripe className="top-0 h-[4px]" />
-              <Head
-                doc={doc}
-                when={when}
-                edition={editionOf(published, [], day)}
-                manifest={manifest}
-                latest={latest}
-                actions={
-                  <LastRun
-                    blocked={
-                      running
-                        ? ""
-                        : aiBusy
-                          ? t.toolbar.aiBusy
-                          : noSteps
-                            ? t.sheetView.noSteps
-                            : errors
-                              ? t.todos.runBlocked
-                              : todo
-                                ? t.todos.runFirst(todo)
-                                : null
-                    }
-                    empty={noSteps}
-                    onRun={() => void startRun()}
-                    onExport={() => setExporting(true)}
-                    onHistory={onHistory}
-                  />
-                }
-              />
-            </header>
-            <div className="flow-root px-10 pb-16 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
-              <div className={MARGIN}>
-                {doc.chapters.map((c) => (
-                  <ChapterView key={c.number} chapter={c} ctx={ctx} />
-                ))}
-                {(flow.steps ?? []).length === 0 && (
-                  <AddHere parentId={null} block={null} ctx={ctx} first />
-                )}
+    <div className="absolute inset-0 flex flex-col">
+      <div
+        ref={desk}
+        className={`flow-chart relative min-h-0 flex-1 ${chart ? "overflow-hidden" : "overflow-auto px-5 py-7"}`}
+        data-sheet={mode}
+      >
+        {chart && (
+          <ChartBody
+            numbers={numbers}
+            stages={stages}
+            run={run}
+            onOpen={onSheet}
+            plate={
+              <>
+                <p className="text-[11px] font-bold tracking-[0.14em] text-[var(--manual-navy)]">
+                  {t.sheetView.kind}
+                </p>
+                <h1 className="mt-0.5 text-[16px] leading-snug font-semibold text-balance text-ink">
+                  {doc.title}
+                </h1>
+                <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[12px] text-slate-500">
+                  {particularsOf(
+                    doc,
+                    editionOf(published, [], day),
+                    manifest,
+                    latest,
+                  ).map(([label, value]) => (
+                    <span
+                      key={label}
+                      className="inline-flex items-center gap-1.5 whitespace-nowrap"
+                    >
+                      {label}
+                      <span className="font-medium text-ink">{value}</span>
+                    </span>
+                  ))}
+                </p>
+              </>
+            }
+          />
+        )}
+        {!chart && (
+          <div className="mx-auto flex w-fit max-w-full items-start gap-6">
+            {/* As a chart the paper is as wide as the chart, and never narrower than the sheet (so it cannot be measured against, and keeps the plain margins). */}
+            <article
+              className={`${PAPER} @container/paper w-[980px] max-w-full min-w-0`}
+            >
+              <header className="relative px-10 pt-12 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
+                <Stripe className="top-0 h-[4px]" />
+                <Head
+                  doc={doc}
+                  when={when}
+                  edition={editionOf(published, [], day)}
+                  manifest={manifest}
+                  latest={latest}
+                  actions={
+                    <LastRun
+                      blocked={
+                        running
+                          ? ""
+                          : aiBusy
+                            ? t.toolbar.aiBusy
+                            : noSteps
+                              ? t.sheetView.noSteps
+                              : errors
+                                ? t.todos.runBlocked
+                                : todo
+                                  ? t.todos.runFirst(todo)
+                                  : null
+                      }
+                      empty={noSteps}
+                      onRun={() => void startRun()}
+                      onExport={() => setExporting(true)}
+                      onHistory={onHistory}
+                    />
+                  }
+                />
+              </header>
+              <div className="flow-root px-10 pb-16 @[52rem]/paper:pr-7 @[52rem]/paper:pl-[72px]">
+                <div className={MARGIN}>
+                  {doc.chapters.map((c) => (
+                    <ChapterView key={c.number} chapter={c} ctx={ctx} />
+                  ))}
+                  {(flow.steps ?? []).length === 0 && (
+                    <AddHere parentId={null} block={null} ctx={ctx} first />
+                  )}
+                </div>
               </div>
-            </div>
-          </article>
-          {/* The chapters stand on the right of the paper: the left of the work is where the AI is asked. */}
-          {doc.chapters.length > 1 && (
-            <nav className="sticky top-0 hidden w-[176px] shrink-0 pt-11 text-[12.5px] leading-[1.5] @[76rem]:block">
-              {/* The chapters down a ruled line, as the paper rules its own head: the one being read is in ink, with the line under it drawn dark. */}
-              <p className="mb-3 border-b border-slate-300 pb-2 text-[11.5px] font-medium tracking-[0.08em] text-slate-500">
-                {t.manual.contents}
-              </p>
-              <ol className="border-l border-slate-300">
-                {doc.chapters.map((c) => {
-                  const here = c.number === reading;
-                  return (
-                    <li key={c.number}>
-                      <button
-                        type="button"
-                        aria-current={here ? "true" : undefined}
-                        onClick={() =>
-                          desk.current
-                            ?.querySelector(`[data-chapter="${c.number}"]`)
-                            ?.scrollIntoView({
-                              behavior: "smooth",
-                              block: "start",
-                            })
-                        }
-                        className={`-ml-px grid w-full grid-cols-[20px_minmax(0,1fr)] border-l-2 py-[5px] pl-3 text-left ${here ? "border-ink font-medium text-ink" : "border-transparent text-slate-500 hover:text-ink"}`}
-                      >
-                        <span
-                          className={`tabular-nums ${here ? "" : "text-slate-400"}`}
+            </article>
+            {/* The chapters stand on the right of the paper: the left of the work is where the AI is asked. */}
+            {doc.chapters.length > 1 && (
+              <nav className="sticky top-0 hidden w-[176px] shrink-0 pt-11 text-[12.5px] leading-[1.5] @[76rem]:block">
+                {/* The chapters down a ruled line, as the paper rules its own head: the one being read is in ink, with the line under it drawn dark. */}
+                <p className="mb-3 border-b border-slate-300 pb-2 text-[11.5px] font-medium tracking-[0.08em] text-slate-500">
+                  {t.manual.contents}
+                </p>
+                <ol className="border-l border-slate-300">
+                  {doc.chapters.map((c) => {
+                    const here = c.number === reading;
+                    return (
+                      <li key={c.number}>
+                        <button
+                          type="button"
+                          aria-current={here ? "true" : undefined}
+                          onClick={() =>
+                            desk.current
+                              ?.querySelector(`[data-chapter="${c.number}"]`)
+                              ?.scrollIntoView({
+                                behavior: "smooth",
+                                block: "start",
+                              })
+                          }
+                          className={`-ml-px grid w-full grid-cols-[20px_minmax(0,1fr)] border-l-2 py-[5px] pl-3 text-left ${here ? "border-ink font-medium text-ink" : "border-transparent text-slate-500 hover:text-ink"}`}
                         >
-                          {c.role ? "" : c.number}
-                        </span>
-                        <span>
-                          {c.title}
-                          {/* Something in it waits to be looked at. */}
-                          {stepIds(c.items).some((id) => changes.has(id)) && (
-                            <span
-                              aria-hidden="true"
-                              className="ml-1.5 inline-block size-[6px] rounded-full bg-primary align-middle"
-                            />
-                          )}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            </nav>
-          )}
-        </div>
-      )}
-      {/* What waits to be looked at, counted once at the foot of the desk; on the review desk its own foot says it. */}
-      {place === "flows" && pending.length > 0 && (
-        <div
-          className={`pointer-events-none z-40 flex justify-center ${chart ? "absolute inset-x-0 bottom-[64px]" : "sticky bottom-0 mt-6"}`}
-        >
-          <div
-            className={`pointer-events-auto flex items-center gap-4 rounded-[6px] bg-sheet py-2 pl-4 ${aiBusy ? "pr-4" : "pr-2"} text-[13px] text-ink shadow-[0_0_0_1px_var(--color-slate-300),0_8px_24px_-8px_rgb(16_24_40/0.25)]`}
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles
-                size={14}
-                strokeWidth={1.75}
-                aria-hidden="true"
-                className="text-primary"
-              />
-              {aiBusy
-                ? t.sheetView.aiWorking
-                : t.sheetView.waiting(pending.length)}
-            </span>
-            {/* Not while the AI is still making the flow: what is on the sheet is not all of it yet. */}
-            {!aiBusy && (
-              <button
-                type="button"
-                onClick={() => void approveAll()}
-                className="rounded-[5px] bg-primary px-3 py-1.5 font-medium text-on-primary hover:bg-primary-hover"
-              >
-                {t.approveAll}
-              </button>
+                          <span
+                            className={`tabular-nums ${here ? "" : "text-slate-400"}`}
+                          >
+                            {c.role ? "" : c.number}
+                          </span>
+                          <span>
+                            {c.title}
+                            {/* Something in it waits to be looked at. */}
+                            {stepIds(c.items).some((id) => changes.has(id)) && (
+                              <span
+                                aria-hidden="true"
+                                className="ml-1.5 inline-block size-[6px] rounded-full bg-primary align-middle"
+                              />
+                            )}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </nav>
             )}
           </div>
+        )}
+      </div>
+      {/* What waits to be looked at, counted once at the foot of the desk, under the paper and the chart and not over them; on the review desk its own foot says it. */}
+      {place === "flows" && pending.length > 0 && (
+        <div
+          className="flex shrink-0 items-center justify-center gap-4 border-t border-slate-200 bg-sheet px-4 py-1.5 text-[13px] text-ink"
+          data-pending-bar
+        >
+          <span className="flex items-center gap-2">
+            <Sparkles
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              className="text-primary"
+            />
+            {aiBusy
+              ? t.sheetView.aiWorking
+              : t.sheetView.waiting(pending.length)}
+          </span>
+          {/* Not while the AI is still making the flow: what is on the sheet is not all of it yet. */}
+          {!aiBusy && (
+            <button
+              type="button"
+              onClick={() => void approveAll()}
+              className="rounded-[5px] bg-primary px-3 py-1 font-medium text-on-primary hover:bg-primary-hover"
+            >
+              {t.approveAll}
+            </button>
+          )}
         </div>
       )}
       {masking && (

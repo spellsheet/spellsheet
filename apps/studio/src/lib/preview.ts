@@ -9,10 +9,15 @@ export type FilePreview =
   | { kind: "image"; mime: string; data: string; bytes: number }
   | { kind: "table"; columns: string[]; rows: string[][]; more: boolean; sheet?: string; sheets?: string[] }
   | { kind: "text"; text: string; more: boolean }
+  | { kind: "document"; blocks: DocBlock[]; more: boolean; pages?: number }
+  | { kind: "archive"; entries: { name: string; bytes: number }[]; count: number; more: boolean }
   | { kind: "missing" }
   | { kind: "tooLarge"; bytes: number }
   | { kind: "file"; bytes: number }
   | { kind: "unreadable"; message: string };
+
+/** A paragraph or a table of a Word document or a PDF, in reading order (`preview_file`). */
+export type DocBlock = { kind: "paragraph"; text: string; heading: boolean } | { kind: "table"; rows: string[][] };
 
 /** A picture ready to draw: shrunk to fit the popover, with its real size. */
 export type Picture = { src: string; width?: number; height?: number };
@@ -23,7 +28,7 @@ export type PreviewSource =
   | { kind: "text"; text: string };
 
 const IMAGE = /\.(png|jpe?g|gif|webp|bmp)$/i;
-const FILE = /\.(png|jpe?g|gif|webp|bmp|xlsx|xlsm|csv|tsv|txt|md|log|json|xml|html?|ya?ml|ini|toml)$/i;
+const FILE = /\.(png|jpe?g|gif|webp|bmp|xlsx|xlsm|docx|docm|pdf|zip|csv|tsv|txt|md|log|json|xml|html?|ya?ml|ini|toml)$/i;
 /** How a picture's base64 starts, by its format. */
 const MAGIC: [string, string][] = [
   ["iVBORw0KGgo", "image/png"],
@@ -96,7 +101,7 @@ export function sizeText(bytes: number): string {
 
 // -- reading, with the last few kept ----------------------------------------
 
-type Loaded = { preview: FilePreview; picture?: Picture };
+export type Loaded = { preview: FilePreview; picture?: Picture };
 const KEEP = 24;
 /** Files change underneath (a run writes output/): a kept preview is read again after this. */
 const FRESH_MS = 10_000;
@@ -143,10 +148,11 @@ export function setPreviewReader(read: PreviewReader) {
   kept.clear();
 }
 
-export function loadPreview(flowId: string | undefined, path: string, sheet?: string): Promise<Loaded> {
+/** `fresh`: read the file again even when a recent read is kept (a run has just written it). */
+export function loadPreview(flowId: string | undefined, path: string, sheet?: string, fresh = false): Promise<Loaded> {
   const key = `${flowId ?? ""}|${path}|${sheet ?? ""}`;
   const hit = kept.get(key);
-  if (hit && Date.now() - hit.at < FRESH_MS) {
+  if (hit && !fresh && Date.now() - hit.at < FRESH_MS) {
     // Most recently used last.
     kept.delete(key);
     kept.set(key, hit);

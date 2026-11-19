@@ -13,7 +13,8 @@ import { DESK, PAPER } from "./sheet/paper";
 
 /** What the AI is doing in the conversation, as one line under the node. */
 function doing(chat: Chat | undefined): string {
-  const reply = chat?.items.at(-1);
+  // The AI's reply under way; a note written meanwhile comes after it.
+  const reply = chat ? [...chat.items].reverse().find((i) => i.role === "ai") : undefined;
   if (!chat || reply?.role !== "ai" || !reply.turnId) return t.drafting.starting;
   const tool = reply.preparing ?? [...reply.parts].reverse().find((p) => p.kind === "tool")?.name ?? null;
   if (!tool) return t.drafting.thinking;
@@ -39,9 +40,9 @@ export function DraftingFlow() {
   const setPaneOpen = useAgent((s) => s.setOpen);
   const elapsed = useElapsed();
   if (!drafting) return null;
-  const asking = !isBusy(chat) && !!chat && waitsForChoice(chat.items);
+  const asking = !!chat && waitsForChoice(chat.items);
   return (
-    <main aria-label={t.drafting.making} aria-busy={!asking} className={`relative min-w-0 flex-1 overflow-auto px-5 py-7 ${DESK}`}>
+    <main aria-label={t.drafting.making} aria-busy={!asking && isBusy(chat)} className={`relative min-w-0 flex-1 overflow-auto px-5 py-7 ${DESK}`}>
       <article className={`@container mx-auto w-[980px] max-w-full ${PAPER}`}>
         <div className="px-6 pt-11 pb-16 @[52rem]:px-[72px]">
         <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-ink">{drafting.title || t.agent.untitled}</h1>
