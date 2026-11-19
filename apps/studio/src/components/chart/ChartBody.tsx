@@ -16,7 +16,6 @@ import {
   Map as MapIcon,
   Maximize2,
   Minus,
-  Play,
   Plus,
   Repeat,
   RotateCw,
@@ -405,6 +404,29 @@ export function ChartBody({
     if (app) apps.set(app, [...(apps.get(app) ?? []), step]);
   }
   const empty = steps.filter((s) => !s.disabled).length === 0;
+  // The stage of the main line before each main track, where it is another: its color flows into this one's.
+  const blendFrom: (number | null)[] = [];
+  {
+    let last: number | null = null;
+    for (const t of route.tracks) {
+      blendFrom.push(
+        t.tone === "main" && last !== null && last !== t.stage ? last : null,
+      );
+      if (t.tone === "main") last = t.stage;
+    }
+  }
+  // When a place on the map is written when it opens: row after row, left to right, as it is read.
+  const inkAt = (x: number, y: number) => {
+    const rows = Math.max(1, route.rows);
+    const row = Math.min(
+      rows - 1,
+      Math.max(0, Math.floor((y / Math.max(1, route.height)) * rows)),
+    );
+    return Math.round(
+      ((row + Math.min(1, Math.max(0, x / Math.max(1, route.width)))) / rows) *
+        900,
+    );
+  };
   // Counted as the sheet counts: the numbered steps.
   const counted = numbers?.size ?? 0;
   const done =
@@ -446,15 +468,79 @@ export function ChartBody({
             height={route.height}
             aria-hidden="true"
           >
+            <defs>
+              <filter
+                id="route-glow"
+                x="-10%"
+                y="-50%"
+                width="120%"
+                height="200%"
+              >
+                <feGaussianBlur stdDeviation="7" />
+              </filter>
+              {route.tracks.map((t, i) => {
+                const from = blendFrom[i];
+                if (from === null || from === undefined) return null;
+                const [x, y] = t.points[0]!;
+                return (
+                  <linearGradient
+                    key={i}
+                    id={`route-blend-${i}`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={x - 36}
+                    y1={y}
+                    x2={x + 56}
+                    y2={y}
+                  >
+                    <stop offset="0" stopColor={stageColor(from)} />
+                    <stop offset="1" stopColor={stageColor(t.stage)} />
+                  </linearGradient>
+                );
+              })}
+            </defs>
+            {/* The light of the line, as the mark's strokes shine. */}
+            <g
+              className="route-glow route-ink-fade"
+              style={{ animationDelay: "900ms" }}
+              filter="url(#route-glow)"
+            >
+              {route.tracks.map((t, i) =>
+                t.tone === "main" || t.tone === "side" ? (
+                  <path
+                    key={i}
+                    d={pathOf(t.points, t.tone === "side" ? 22 : 16)}
+                    fill="none"
+                    stroke={stageColor(t.stage)}
+                    strokeWidth={t.tone === "main" ? 14 : 9}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ) : null,
+              )}
+            </g>
             {route.tracks.map((t, i) => (
               <path
                 key={i}
+                // Written out from 開始 on, as a spell is written: a line once, a dashed one by fading in.
+                className={
+                  t.tone === "spur" || t.tone === "fail"
+                    ? "route-ink-fade"
+                    : "route-ink"
+                }
+                pathLength={
+                  t.tone === "spur" || t.tone === "fail" ? undefined : 1
+                }
+                style={{
+                  animationDelay: `${inkAt(t.points[0]![0], t.points[0]![1])}ms`,
+                }}
                 d={pathOf(t.points, t.tone === "side" ? 22 : 16)}
                 fill="none"
                 stroke={
                   t.tone === "spur" || t.tone === "fail"
                     ? "var(--color-shu-500)"
-                    : stageColor(t.stage)
+                    : blendFrom[i] != null
+                      ? `url(#route-blend-${i})`
+                      : stageColor(t.stage)
                 }
                 strokeWidth={
                   t.tone === "main"
@@ -469,19 +555,17 @@ export function ChartBody({
                   t.tone === "wrap" ? 0.32 : t.tone === "side" ? 0.9 : 1
                 }
                 strokeDasharray={
-                  t.tone === "spur"
-                    ? "2 6"
-                    : t.tone === "fail"
-                      ? "6 5"
-                      : undefined
+                  t.tone === "spur" ? "2 6" : t.tone === "fail" ? "6 5" : "1"
                 }
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
             ))}
-            {route.spans.map((s, i) => (
-              <SpanLine key={i} span={s} />
-            ))}
+            <g className="route-ink-fade" style={{ animationDelay: "700ms" }}>
+              {route.spans.map((s, i) => (
+                <SpanLine key={i} span={s} />
+              ))}
+            </g>
           </svg>
           {route.spans.map((s, i) =>
             s.from || s.to ? (
@@ -499,8 +583,12 @@ export function ChartBody({
             route.tags.map((t, i) => (
               <span
                 key={i}
-                className="absolute flex items-center gap-2 text-[13.5px] font-semibold whitespace-nowrap text-ink"
-                style={{ left: t.x - 4, top: t.y }}
+                className="route-ink-fade absolute flex items-center gap-2 text-[13.5px] font-semibold whitespace-nowrap text-ink"
+                style={{
+                  left: t.x - 4,
+                  top: t.y,
+                  animationDelay: `${inkAt(t.x, t.y + 60)}ms`,
+                }}
               >
                 <span
                   className="grid size-[22px] place-items-center rounded-full text-[11.5px] font-bold text-white tabular-nums"
@@ -515,16 +603,24 @@ export function ChartBody({
             n.tone === "ask" ? (
               <span
                 key={i}
-                className={`route-ask-words absolute w-[116px] text-[12px] leading-[1.35] font-semibold ${n.anchor === "end" ? "-translate-x-full -translate-y-full text-right" : "-translate-x-1/2 text-center"}`}
-                style={{ left: n.x, top: n.y }}
+                className={`route-ask-words route-ink-fade absolute w-[116px] text-[12px] leading-[1.35] font-semibold ${n.anchor === "end" ? "-translate-x-full -translate-y-full text-right" : "-translate-x-1/2 text-center"}`}
+                style={{
+                  left: n.x,
+                  top: n.y,
+                  animationDelay: `${inkAt(n.x, n.y) + 250}ms`,
+                }}
               >
                 {n.text}
               </span>
             ) : (
               <span
                 key={i}
-                className={`absolute -translate-y-1/2 text-[11.5px] leading-none whitespace-nowrap ${n.anchor === "middle" ? "-translate-x-1/2" : ""} ${n.tone === "fail" ? "text-shu-600" : "text-slate-500"}`}
-                style={{ left: n.x, top: n.y }}
+                className={`route-ink-fade absolute -translate-y-1/2 text-[11.5px] leading-none whitespace-nowrap ${n.anchor === "middle" ? "-translate-x-1/2" : ""} ${n.tone === "fail" ? "text-shu-600" : "text-slate-500"}`}
+                style={{
+                  left: n.x,
+                  top: n.y,
+                  animationDelay: `${inkAt(n.x, n.y) + 250}ms`,
+                }}
               >
                 {n.text}
               </span>
@@ -539,8 +635,14 @@ export function ChartBody({
                 title={plain(sentence(s.step, defs.get(s.step.type)))}
                 onClick={() => select(s.step.id)}
                 onContextMenu={menu(s.step.id)}
-                className={`route-stop absolute z-10 flex items-center justify-center gap-1.5 rounded-full px-3 text-[12px] whitespace-nowrap ${s.fail ? "route-stop-fail" : ""}`}
-                style={{ left: s.x, top: s.y, width: s.w, height: 26 }}
+                className={`route-stop route-ink-fade absolute z-10 flex items-center justify-center gap-1.5 rounded-full px-3 text-[12px] whitespace-nowrap ${s.fail ? "route-stop-fail" : ""}`}
+                style={{
+                  left: s.x,
+                  top: s.y,
+                  width: s.w,
+                  height: 26,
+                  animationDelay: `${inkAt(s.x + s.w / 2, s.y - 60) + 400}ms`,
+                }}
               >
                 <Icon
                   size={12}
@@ -556,20 +658,47 @@ export function ChartBody({
               </button>
             );
           })}
-          {route.pills.map((p) => (
-            <span
-              key={p.kind}
-              className={`route-pill absolute z-10 flex items-center justify-center gap-1.5 rounded-full text-[12.5px] font-semibold ${p.kind === "end" ? "route-pill-end" : ""}`}
-              style={{ left: p.x, top: p.y, width: PILL_W, height: PILL_H }}
-            >
-              {p.kind === "start" ? (
-                <Play size={12} strokeWidth={2.2} aria-hidden="true" />
-              ) : (
+          {route.pills.map((p) =>
+            p.kind === "start" ? (
+              // The line comes out of the mark: where the spell starts.
+              <span
+                key={p.kind}
+                className="absolute z-10 flex flex-col items-center gap-1"
+                style={{
+                  left: p.x + PILL_W - 46,
+                  top: p.y + PILL_H / 2 - 23,
+                  width: 46,
+                }}
+              >
+                <span className="route-origin grid size-[46px] place-items-center rounded-full">
+                  <img
+                    src="/mark.png"
+                    alt=""
+                    className="route-mark size-[34px]"
+                    draggable={false}
+                  />
+                </span>
+                <span className="text-[12px] font-semibold text-ink">
+                  {words.start}
+                </span>
+              </span>
+            ) : (
+              <span
+                key={p.kind}
+                className="route-pill route-pill-end route-ink-in absolute z-10 flex items-center justify-center gap-1.5 rounded-full text-[12.5px] font-semibold"
+                style={{
+                  left: p.x,
+                  top: p.y,
+                  width: PILL_W,
+                  height: PILL_H,
+                  animationDelay: `${inkAt(p.x, p.y) + 300}ms`,
+                }}
+              >
                 <Flag size={12} strokeWidth={2.2} aria-hidden="true" />
-              )}
-              {p.kind === "start" ? words.start : words.end}
-            </span>
-          ))}
+                {words.end}
+              </span>
+            ),
+          )}
           {route.stations.map((s, i) => (
             <StationView
               key={i}
@@ -581,6 +710,7 @@ export function ChartBody({
               withApp={apps.size > 1}
               onPick={select}
               onMenu={menu}
+              delay={inkAt(s.x, s.y)}
             />
           ))}
           {editable &&
@@ -637,7 +767,15 @@ export function ChartBody({
         data-float
         className="route-float absolute top-3 left-4 z-30 max-w-[min(760px,calc(100%-32px))] cursor-default rounded-[10px] px-4 py-2.5"
       >
-        {plate}
+        <div className="flex items-start gap-3">
+          <img
+            src="/mark.png"
+            alt=""
+            className="route-mark mt-0.5 size-9 shrink-0"
+            draggable={false}
+          />
+          <div className="min-w-0">{plate}</div>
+        </div>
         {apps.size > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {[...apps].map(([app, list]) => {
@@ -966,8 +1104,8 @@ function SpanTag({
       title={plain(sentence(span.step, defs.get(span.step.type)))}
       onClick={() => onPick(span.step.id)}
       onContextMenu={onMenu(span.step.id)}
-      className={`route-span-tag absolute z-10 flex max-w-[360px] -translate-y-1/2 items-center gap-1 rounded-full px-2 text-[11.5px] leading-[18px] font-semibold whitespace-nowrap ${shift} ${picked === span.step.id ? "flow-chart-on" : ""}`}
-      style={{ left, top: span.y, color: c }}
+      className={`route-span-tag route-ink-fade absolute z-10 flex max-w-[360px] -translate-y-1/2 items-center gap-1 rounded-full px-2 text-[11.5px] leading-[18px] font-semibold whitespace-nowrap ${shift} ${picked === span.step.id ? "flow-chart-on" : ""}`}
+      style={{ left, top: span.y, color: c, animationDelay: "700ms" }}
     >
       <Icon
         size={12}
@@ -1042,7 +1180,9 @@ function StationView({
   withApp,
   onPick,
   onMenu,
+  delay,
 }: {
+  delay: number;
   station: Station;
   defs: Defs;
   number?: number;
@@ -1120,8 +1260,9 @@ function StationView({
       onClick={() => onPick(step.id)}
       onContextMenu={onMenu(step.id)}
       data-step={step.id}
-      className={`route-stop-btn group absolute z-10 flex flex-col items-center ${above ? "flex-col-reverse" : ""} gap-1.5`}
+      className={`route-stop-btn route-ink-in group absolute z-10 flex flex-col items-center ${above ? "flex-col-reverse" : ""} gap-1.5`}
       style={{
+        animationDelay: `${delay + 180}ms`,
         left: station.x - half,
         width: half * 2,
         top: above ? station.y + markH / 2 : station.y - markH / 2,
