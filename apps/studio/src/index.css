@@ -7,9 +7,13 @@
  * slate so they sit next to the navy.
  */
 @theme {
-  --font-sans: "Inter Variable", "Noto Sans JP Variable", "Yu Gothic UI", "Meiryo", sans-serif;
+  --font-sans:
+    "Inter Variable", "Noto Sans JP Variable", "Yu Gothic UI", "Meiryo",
+    sans-serif;
   /* Latin from a code font; kana and kanji from the same Japanese font as the UI. */
-  --font-mono: "Cascadia Mono", Consolas, "Noto Sans JP Variable", "BIZ UDGothic", monospace;
+  --font-mono:
+    "Cascadia Mono", Consolas, "Noto Sans JP Variable", "BIZ UDGothic",
+    monospace;
 
   /*
    * Greys: Tailwind's slate, each step taken darker, so secondary text
@@ -105,11 +109,15 @@
   --radius-lg: 6px;
   --radius-xl: 8px;
   --radius-2xl: 8px;
-  --shadow-sheet: 0 0 0 1px rgb(20 22 26 / 0.06), 0 1px 2px rgb(20 22 26 / 0.05);
+  --shadow-sheet:
+    0 0 0 1px rgb(20 22 26 / 0.06), 0 1px 2px rgb(20 22 26 / 0.05);
   --shadow-node: 0 0 0 1px rgb(20 22 26 / 0.08), 0 1px 2px rgb(20 22 26 / 0.05);
-  --shadow-raised: 0 0 0 1px rgb(20 22 26 / 0.04), 0 2px 6px rgb(20 22 26 / 0.07);
-  --shadow-lifted: 0 10px 20px rgb(15 27 42 / 0.16), 0 6px 6px rgb(15 27 42 / 0.14);
-  --shadow-dialog: 0 19px 38px rgb(15 27 42 / 0.28), 0 15px 12px rgb(15 27 42 / 0.18);
+  --shadow-raised:
+    0 0 0 1px rgb(20 22 26 / 0.04), 0 2px 6px rgb(20 22 26 / 0.07);
+  --shadow-lifted:
+    0 10px 20px rgb(15 27 42 / 0.16), 0 6px 6px rgb(15 27 42 / 0.14);
+  --shadow-dialog:
+    0 19px 38px rgb(15 27 42 / 0.28), 0 15px 12px rgb(15 27 42 / 0.18);
 }
 
 /*
@@ -276,7 +284,11 @@ textarea {
  */
 .flow-frame.flow-frame-running,
 .flow-edge-running-around {
-  border-color: color-mix(in srgb, var(--color-accent-500) 35%, var(--color-slate-300)) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--color-accent-500) 35%,
+    var(--color-slate-300)
+  ) !important;
 }
 /*
  * Its head and foot are its top and bottom edges: in the frame's colour.
@@ -285,7 +297,11 @@ textarea {
  */
 .flow-frame.flow-frame-running-here,
 .flow-edge-running-here {
-  border-color: color-mix(in srgb, var(--color-accent-500) 65%, var(--color-slate-300)) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--color-accent-500) 65%,
+    var(--color-slate-300)
+  ) !important;
 }
 /* The answer a line takes out of a decision (はい／いいえ): in the decision's yellow, so it reads as the hexagon's answer. */
 .flow-answer {
@@ -303,7 +319,11 @@ textarea {
 /* Pointing at a break inside the loop: this is where it goes. */
 .flow-foot.flow-foot-marked {
   border-color: var(--color-slate-500);
-  background-color: color-mix(in srgb, var(--color-slate-100) 80%, var(--color-sheet));
+  background-color: color-mix(
+    in srgb,
+    var(--color-slate-100) 80%,
+    var(--color-sheet)
+  );
 }
 .flow-foot.flow-foot-selected {
   border-color: var(--color-primary);
@@ -334,7 +354,11 @@ textarea {
     linear-gradient(45deg, transparent 75%, var(--color-slate-100) 75%),
     linear-gradient(-45deg, transparent 75%, var(--color-slate-100) 75%);
   background-size: 12px 12px;
-  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
 }
 
 /* How far a running node got (RunBar): it grows by itself, one step a second when motion is reduced. */
@@ -360,7 +384,8 @@ textarea {
 /* The step of a frame is picked: the whole frame is marked, its head being its top edge. */
 .flow-frame.flow-frame-selected {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 16%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
 /*
@@ -441,7 +466,249 @@ textarea {
 .flow-chart-caught {
   background: color-mix(in srgb, var(--color-shu-500) 10%, var(--color-sheet));
 }
+/*
+ * The chart as a railway map (components/chart): a desk to move about on, each
+ * part of the work a stretch of the line in its own colour (the sheet's own
+ * colours first), and cards floating over the desk for what the flow is, the
+ * size it is drawn at and the whole map in small.
+ */
+.route-desk {
+  --route-1: #12a7b4;
+  --route-2: #0a6fa8;
+  --route-3: #3f9a5a;
+  --route-4: #f5872a;
+  --route-5: #7a5cc4;
+  --route-6: #d0476a;
+  --route-ask: #fff7e6;
+  --route-ask-edge: #d9a441;
+  --route-ask-ink: #a8650a;
+  background-color: var(--manual-desk);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--color-slate-300) 70%, transparent) 1px,
+    transparent 1.3px
+  );
+  background-size: 22px 22px;
+}
+[data-theme="dark"] .route-desk {
+  background-color: #0b131b;
+  --route-1: #3fcbd5;
+  --route-2: #4aa8e0;
+  --route-3: #5cc27e;
+  --route-4: #f79a48;
+  --route-5: #a68ef0;
+  --route-6: #f0789a;
+  --route-ask: #2a2414;
+  --route-ask-edge: #c99a3e;
+  --route-ask-ink: #f2c06a;
+  background-image: radial-gradient(
+    rgb(255 255 255 / 0.09) 1px,
+    transparent 1.3px
+  );
+}
+/* Over the desk: a pane of frosted glass, so the map shows faintly under it. */
+.route-float {
+  background: color-mix(in srgb, var(--color-sheet) 84%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow:
+    var(--shadow-raised),
+    0 10px 28px -12px rgb(15 27 42 / 0.25);
+}
+.route-station {
+  background: var(--color-sheet);
+  color: var(--color-ink);
+}
+.route-dot {
+  background: var(--color-sheet);
+}
+.route-diamond {
+  background: var(--route-ask);
+  border-color: var(--route-ask-edge);
+}
+.route-ask-words {
+  color: var(--route-ask-ink);
+}
+/* How far a run got: gone through in green, the one it is on ringed and breathing, a failure in vermilion. */
+.route-station.route-done,
+.route-dot.route-done {
+  background: var(--color-moegi-500);
+  border-color: var(--color-moegi-500) !important;
+  color: #fff;
+}
+.route-station.route-failed,
+.route-dot.route-failed,
+.route-diamond.route-failed {
+  background: var(--color-shu-500);
+  border-color: var(--color-shu-500) !important;
+  color: #fff;
+}
+.route-now {
+  position: relative;
+  border-color: var(--color-primary) !important;
+  animation: route-breathe 1.4s ease-in-out infinite;
+}
+/* The station at work: the mark's four colors turn round it, as the splash's mark arrives turning. */
+.route-now::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 999px;
+  background: conic-gradient(
+    from 0deg,
+    #1aa6b7,
+    #1f6fb2,
+    #f08a3c,
+    #4f9d5a,
+    #1aa6b7
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 3.5px),
+    #000 calc(100% - 3px)
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 3.5px),
+    #000 calc(100% - 3px)
+  );
+  animation: route-turn 1.6s linear infinite;
+}
+@keyframes route-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Opening the map writes it: the line drawn out from 開始, the stations set on it as it passes. */
+.route-ink {
+  stroke-dashoffset: 1;
+  animation: route-write 0.75s cubic-bezier(0.33, 0, 0.2, 1) forwards;
+}
+@keyframes route-write {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.route-ink-fade {
+  opacity: 0;
+  animation: route-show 0.4s ease-out forwards;
+}
+.route-ink-in {
+  opacity: 0;
+  animation: route-set 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes route-show {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes route-set {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+.route-glow path {
+  stroke-opacity: 0.22;
+}
+[data-theme="dark"] .route-glow path {
+  stroke-opacity: 0.42;
+}
+.route-origin {
+  background: var(--color-sheet);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-ink) 10%, transparent),
+    0 6px 22px -6px color-mix(in srgb, #1f6fb2 45%, transparent);
+}
+[data-theme="dark"] .route-origin {
+  background: #0b131b;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.12),
+    0 0 28px -4px rgb(58 160 230 / 0.45);
+}
+/* The mark on 開始 and on the card arrives as on the splash. */
+.route-mark {
+  animation: route-arrive 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes route-arrive {
+  from {
+    opacity: 0;
+    transform: rotate(-28deg) scale(0.92);
+  }
+}
+@keyframes route-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 5px
+      color-mix(in srgb, var(--color-primary) 28%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 11px
+      color-mix(in srgb, var(--color-primary) 6%, transparent);
+  }
+}
+.route-picked {
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 3px var(--color-sheet),
+    0 0 0 5px var(--color-primary);
+}
+.route-ping {
+  animation: route-breathe 1.6s ease-in-out infinite;
+}
+.route-pill {
+  background: var(--color-ink);
+  color: var(--color-sheet);
+}
+.route-pill-end {
+  background: var(--color-moegi-600);
+  color: #fff;
+}
+.route-stop {
+  background: var(--color-sheet);
+  color: var(--color-slate-600);
+  box-shadow: inset 0 0 0 1.25px var(--color-slate-300);
+}
+.route-stop-fail {
+  background: var(--color-shu-50);
+  color: var(--color-shu-600);
+  box-shadow: inset 0 0 0 1.25px
+    color-mix(in srgb, var(--color-shu-500) 55%, transparent);
+}
+[data-theme="dark"] .route-stop-fail {
+  background: color-mix(in srgb, var(--color-shu-500) 14%, var(--color-sheet));
+}
+.route-span-tag {
+  background: var(--manual-desk);
+}
+.route-map-view {
+  fill: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  stroke: var(--color-primary);
+  stroke-width: 1.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-now,
+  .route-now::after,
+  .route-mark,
+  .route-ping {
+    animation: none;
+  }
+  .route-ink,
+  .route-ink-fade,
+  .route-ink-in {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
 /* The row picked: the sheet's highlighter under its words. */
 .flow-chart-on {
-  background: linear-gradient(transparent 58%, var(--sheet-marker) 58%, var(--sheet-marker) 94%, transparent 94%);
+  background: linear-gradient(
+    transparent 58%,
+    var(--sheet-marker) 58%,
+    var(--sheet-marker) 94%,
+    transparent 94%
+  );
 }
