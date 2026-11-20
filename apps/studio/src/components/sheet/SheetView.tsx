@@ -73,6 +73,15 @@ import type {
   VersionSummary,
 } from "@spellsheet/schema";
 import { menuFor } from "../../lib/contextMenu";
+import {
+  followScroll,
+  followWait,
+  followedStep,
+  MARKS_GAP_MS,
+  reducedMotion,
+  scrollBehavior,
+  useSettled,
+} from "../../lib/calmFollow";
 import { useFlowBusy } from "../../lib/useFlowBusy";
 import { useStepMenu } from "../menus";
 import { ChartBody } from "../chart/ChartBody";
@@ -907,8 +916,14 @@ function StepRow({
                 step.text
               )}
             </span>
-            {state && state !== "running" && state !== "skipped" && (
-              <RunMark state={state} />
+            {/* The mark keeps its place while the step runs (again, in a loop), so the line does not reflow. */}
+            {state === "running" ? (
+              <span
+                aria-hidden="true"
+                className="ml-1.5 inline-block w-[14px]"
+              />
+            ) : (
+              state && state !== "skipped" && <RunMark state={state} />
             )}
           </p>
           {failed && (
@@ -1333,7 +1348,10 @@ export function SheetView({
   } | null>(null);
   const [exporting, setExporting] = useState(false);
   const pending = usePendingReview();
-  const run = useStudio(trailOf);
+  const trail = useStudio(trailOf);
+  // The marks on the paper redraw a few times a second at most while it runs: a fast loop does not flash its lines.
+  // A pause or the end is shown at once.
+  const run = useSettled(trail, trail?.status === "running" ? MARKS_GAP_MS : 0);
   const place = useStudio((s) => s.place);
   const approveAll = useStudio((s) => s.approveAll);
   const fail = useStudio((s) => s.fail);
@@ -1387,24 +1405,77 @@ export function SheetView({
         : null,
     [flow, defs, manifest, subflows, masks, drafts],
   );
-  // The step the run is on is kept in sight.
+  // The step the run is on is kept in sight, calmly (lib/calmFollow): a loop must not shake the page.
   const follow = useStudio((s) => s.followRun);
-  const live = run && isActive(run) && follow ? run : null;
-  const at = live
-    ? [...live.starts]
-        .reverse()
-        .find(
-          (x) =>
-            live.steps[x.stepId] === "running" ||
-            live.steps[x.stepId] === "paused",
-        )?.stepId
-    : undefined;
+  const setFollowRun = useStudio((s) => s.setFollowRun);
+  const live =
+    trail && isActive(trail) && follow && mode === "sheet" ? trail : null;
+  // Paused, the page stays where the pause put it (a breakpoint is brought into sight on its own): a move still waiting is dropped.
+  const at = live?.status === "running" ? followedStep(live) : undefined;
+  const moved = useRef(0);
   useEffect(() => {
-    if (at)
-      desk.current
-        ?.querySelector(`[data-step="${at}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const el = desk.current;
+    if (!at || !el) return;
+    const go = () => {
+      const row = el.querySelector(`[data-step="${CSS.escape(at)}"]`);
+      if (!row) return;
+      const box = row.getBoundingClientRect();
+      const view = el.getBoundingClientRect();
+      const to = followScroll({
+        top: box.top - view.top,
+        bottom: box.bottom - view.top,
+        height: el.clientHeight,
+        scrollTop: el.scrollTop,
+        maxScroll: el.scrollHeight - el.clientHeight,
+      });
+      if (to === null) return;
+      moved.current = Date.now();
+      el.scrollTo({
+        top: to,
+        behavior: scrollBehavior(Math.abs(to - el.scrollTop), el.clientHeight),
+      });
+    };
+    const wait = followWait(moved.current, Date.now());
+    if (wait === 0) {
+      go();
+      return;
+    }
+    const timer = setTimeout(go, wait);
+    return () => clearTimeout(timer);
   }, [at]);
+  // The person moving the page themselves while it follows: it stops following (the bar's 実行中を表示 turns it back on).
+  const following = !!live;
+  useEffect(() => {
+    const el = desk.current;
+    if (!el || !following) return;
+    const stop = () => setFollowRun(false);
+    const key = (e: KeyboardEvent) => {
+      const typing =
+        e.target instanceof HTMLElement &&
+        e.target.closest("input, textarea, select, [contenteditable='true']");
+      if (
+        !typing &&
+        [
+          "PageUp",
+          "PageDown",
+          "Home",
+          "End",
+          "ArrowUp",
+          "ArrowDown",
+          " ",
+        ].includes(e.key)
+      )
+        stop();
+    };
+    el.addEventListener("wheel", stop, { passive: true });
+    el.addEventListener("touchmove", stop, { passive: true });
+    el.addEventListener("keydown", key);
+    return () => {
+      el.removeEventListener("wheel", stop);
+      el.removeEventListener("touchmove", stop);
+      el.removeEventListener("keydown", key);
+    };
+  }, [following, setFollowRun]);
   // A link to a step (a log line, a result, a variable's use) and a step the AI just added are brought
   // into sight. A step inside a called flow is shown by the call that holds it.
   const reveal = useStudio((s) => s.reveal);
@@ -1420,7 +1491,10 @@ export function SheetView({
     // Not on the paper yet (the flow with the new step is still to come): looked for again when it is.
     if (mode === "sheet" && !row) return;
     revealed = reveal.seq;
-    row?.scrollIntoView({ behavior: "smooth", block: "center" });
+    row?.scrollIntoView({
+      behavior: reducedMotion() ? "auto" : "smooth",
+      block: "center",
+    });
   }, [reveal, doc, mode]);
   // The chapter being read: the last one whose heading has passed the top of the desk.
   const [reading, setReading] = useState(1);
@@ -1562,7 +1636,7 @@ export function SheetView({
         <ChartBody
           numbers={numbers}
           stages={stages}
-          run={run}
+          run={trail}
           onOpen={onSheet}
           plate={
             <>
@@ -1659,7 +1733,7 @@ export function SheetView({
                           desk.current
                             ?.querySelector(`[data-chapter="${c.number}"]`)
                             ?.scrollIntoView({
-                              behavior: "smooth",
+                              behavior: reducedMotion() ? "auto" : "smooth",
                               block: "start",
                             })
                         }
