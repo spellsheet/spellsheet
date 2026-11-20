@@ -223,6 +223,8 @@ jobs:
         run: pnpm --filter @spellsheet/browser-adapter exec playwright-core install --with-deps chromium
       - run: pnpm -r typecheck
       - run: pnpm -r test
+      - name: The report relay (services/report-relay)
+        run: node --test services/report-relay/test/*.test.js
       # The Rust jobs build the screens too, but they are skipped when only
       # the screens change.
       - name: The Writer's screens build

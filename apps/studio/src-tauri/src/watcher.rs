@@ -202,6 +202,23 @@ pub(crate) fn spawn_pick_requests(app: AppHandle, dir: PathBuf) {
     }
 }
 
+pub(crate) const REPORTS_CHANGED: &str = "reports-changed";
+
+/// Tells the frontend when an AI client leaves a report for the developers
+/// (report_to_developers), so Writer shows it to the person.
+pub(crate) fn spawn_reports(app: AppHandle, dir: PathBuf) {
+    let spawned = std::thread::Builder::new()
+        .name("report-watcher".into())
+        .spawn(move || {
+            if let Err(e) = watch_json_dir(&app, &dir, REPORTS_CHANGED) {
+                tracing::error!(error = %e, dir = %dir.display(), "report watcher stopped");
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::error!(error = %e, "failed to start report watcher");
+    }
+}
+
 fn watch_approvals(app: &AppHandle, dir: &Path) -> notify::Result<()> {
     watch_json_dir(app, dir, APPROVALS_CHANGED)
 }

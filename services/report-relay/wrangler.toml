@@ -1,0 +1,16 @@
+# Cloudflare Worker that files reports from SpellSheet Writer as GitHub
+# issues. Set up once (README.md):
+#   npx wrangler@4 kv namespace create REPORTS   -> put the id below
+#   npx wrangler@4 secret put GITHUB_TOKEN
+#   npx wrangler@4 secret put SALT
+#   npx wrangler@4 deploy
+name = "spellsheet-report-relay"
+main = "src/worker.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+REPO = "spellsheet/spellsheet"
+
+[[kv_namespaces]]
+binding = "REPORTS"
+id = "REPLACE_WITH_THE_KV_NAMESPACE_ID"

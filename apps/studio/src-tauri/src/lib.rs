@@ -15,6 +15,7 @@ mod legacy;
 mod manual;
 mod opened;
 mod picker;
+mod reports;
 mod run_band;
 mod runner;
 mod schedules;
@@ -138,6 +139,10 @@ pub fn run() {
                 app.handle().clone(),
                 service.store().local_root().join("picks"),
             );
+            watcher::spawn_reports(
+                app.handle().clone(),
+                service.store().local_root().join("reports"),
+            );
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -216,6 +221,10 @@ pub fn run() {
             manual::manual_image,
             manual::save_manual_masks,
             manual::save_manual_export,
+            reports::list_reports,
+            reports::discard_report,
+            reports::send_report,
+            reports::open_report,
             inventory::list_inventories,
             inventory::get_inventory,
             inventory::change_inventory,
