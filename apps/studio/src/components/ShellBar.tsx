@@ -14,6 +14,7 @@ import { setTheme, type ThemeChoice, useTheme } from "../lib/theme";
 import { isActive, type Place } from "../store";
 import { runnerApi } from "../runner/api";
 import { useAppVersion, useUpdate } from "./AppMenu";
+import { ReportChip } from "./ReportDialog";
 import { useInbox } from "./ReviewDesk";
 
 const KBD = "rounded-sm border border-slate-200 bg-sheet px-1 font-sans text-[10.5px] leading-4 font-medium text-slate-500";
@@ -100,6 +101,7 @@ export function Waiting() {
           {t.secrets} {asks}
         </button>
       )}
+      <ReportChip className={chip} />
     </>
   );
 }

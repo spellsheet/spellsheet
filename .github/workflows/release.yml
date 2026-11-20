@@ -33,6 +33,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Where Writer sends reports the person agreed to send (services/report-relay).
+  # A repository variable; empty leaves only 「GitHub で書く」 in the app.
+  SPELLSHEET_REPORT_URL: ${{ vars.SPELLSHEET_REPORT_URL }}
 
 jobs:
   studio:

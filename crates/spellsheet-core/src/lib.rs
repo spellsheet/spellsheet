@@ -25,6 +25,7 @@ pub mod places;
 pub mod policy;
 pub mod project;
 pub mod registry;
+pub mod report;
 pub mod requires;
 pub mod resource;
 pub mod review;
@@ -40,7 +41,7 @@ pub mod version;
 pub use approval::{AiAction, ApprovalRequest, ApprovalStatus, ApprovalStore, NewApproval, Redeem};
 pub use call::Subflow;
 pub use error::{CoreError, CoreResult, ErrorPayload};
-pub use ids::{ApprovalId, FlowId, InventoryId, ObservationId, PickId, RunId, StepId};
+pub use ids::{ApprovalId, FlowId, InventoryId, ObservationId, PickId, ReportId, RunId, StepId};
 pub use inbox::{ChatInbox, InboxMessage};
 pub use model::{
     Flow, FlowSettings, FlowSummary, Metadata, OnError, Part, PartApp, RetryPolicy, SCHEMA_VERSION,
@@ -54,6 +55,7 @@ pub use registry::{
     Deprecation, ExternalUse, PluginCredential, PluginInfo, RiskLevel, StepCategory, StepRegistry,
     StepTypeDef,
 };
+pub use report::{NewReport, Report, ReportKind, ReportStatus, ReportStore, redact};
 pub use review::{
     CaseOutcome, ChangeRecord, Evidence, EvidenceDetail, NewObservation, NewReview, Observation,
     ObservationContent, ObservationSource, ReviewTimeline, ReviewVerdict, StepNote, TestRun,

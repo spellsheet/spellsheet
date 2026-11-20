@@ -5199,6 +5199,8 @@ dependencies = [
  "base64 0.22.1",
  "dirs",
  "notify",
+ "reqwest",
+ "rustls",
  "semver",
  "serde",
  "serde_json",

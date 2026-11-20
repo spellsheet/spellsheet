@@ -340,7 +340,7 @@ async fn read_only_server_exposes_only_read_tools() {
 async fn every_tool_has_an_object_input_schema_and_description() {
     let h = start(ServerOptions::default()).await;
     let tools = h.client.list_all_tools().await.unwrap();
-    assert_eq!(tools.len(), 44);
+    assert_eq!(tools.len(), 45);
     for tool in tools {
         assert_eq!(
             tool.input_schema.get("type"),
@@ -1593,4 +1593,40 @@ async fn what_the_person_writes_meanwhile_comes_with_the_next_tool_result() {
 
     let again = h.ok("list_flows", json!({})).await;
     assert!(again.get(MESSAGES_KEY).is_none());
+}
+
+#[tokio::test]
+async fn ai_leaves_a_report_that_waits_for_the_person() {
+    let h = start(ServerOptions::default()).await;
+    let drafted = h
+        .ok(
+            "report_to_developers",
+            json!({
+                "kind": "missingNode",
+                "title": "Excel の表を並べ替えるノードがない",
+                "body": "excel.readRows で読んだ表を日付順に並べたかった。問い合わせ先 a@example.co.jp",
+                "stepType": "excel.readRows",
+            }),
+        )
+        .await;
+    assert_eq!(drafted["status"], "drafted");
+    assert_eq!(drafted["hidden"], 1);
+
+    // Writer (another process) sees the draft; nothing was sent.
+    let local = FileStore::open(&h.root).unwrap().local_root().to_path_buf();
+    let store = spellsheet_core::ReportStore::new(&local);
+    let drafts = store.drafts().unwrap();
+    assert_eq!(drafts.len(), 1);
+    assert_eq!(drafts[0].id.as_str(), drafted["reportId"].as_str().unwrap());
+    assert!(drafts[0].body.ends_with("[メールアドレス]"));
+
+    let (is_error, refused) = h
+        .call(
+            "report_to_developers",
+            json!({ "kind": "bug", "title": " ", "body": "x" }),
+        )
+        .await;
+    assert!(is_error);
+    assert_eq!(refused["code"], "INVALID_PARAMS");
+    h.client.cancel().await.unwrap();
 }

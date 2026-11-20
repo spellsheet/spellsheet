@@ -95,6 +95,7 @@ Writer の **設定 → AI → MCP サーバーの登録 → Cursor →「Cursor
 |  | `save_test_case` | テストケースを保存（`tests/<名前>.json`：`description`・`inputs`・`expect`。置き換えは `overwrite`）。`description` は業務の言葉の約束として書く：Writer の確認パネルは AI が保存したケースを「約束」として結果と一緒に見せる。入力変数でない名前とシークレットの入力は断る（[testing.md](testing.md)） |
 |  | `save_work_inventory` | 聞き取った業務を、聞くたびに記録（`id` なしで新しく始める）。棚卸しと、SpellSheet が計算した assessment を返す（[inventory.md](inventory.md)） |
 |  | `request_secret` | ログイン情報をユーザーに求める。Writer に「ログイン情報が必要です」と出て、名前とサイトが入った登録フォームが開く。値は Writer でだけ入力し、AI には返らない。`waitMs` で登録まで待てる（[secrets.md](secrets.md)） |
+|  | `report_to_developers` | SpellSheet の開発元への報告を残す。SpellSheet の不具合（`bug`）か、フローに要るのにないノード（`missingNode`）。下書きだけで、Writer が利用者に見せ、利用者が見せたくないところを消して送るかどうかを決める。送ったものは GitHub の公開の issue になる。メールアドレス・電話番号・URL・フォルダーの場所は自動で伏せる（[設計](../design/reports.md)） |
 | run | `run_flow` | Runtime で作業中の内容を実行（AI の試し実行。AI は実行に関与しない）。`waitMs` で完了まで待てる。`published: true` で確定版を実行。`secret: true` の入力変数には値を渡せない |
 |  | `stop_flow` | 実行のキャンセル |
 |  | `run_tests` | フローのテストケース（`tests/`、全部か `cases`）を作業中の内容で流し、期待と比べる：`passed`・`failed`・`cases[]`（`mismatches[]`）（[testing.md](testing.md)）。全部終わるまで待つ。承認は `run_flow` と同じ |

@@ -73,6 +73,7 @@ pub const TOOLS: &[(&str, ToolClass)] = &[
     ("delete_project_file", ToolClass::Write),
     ("save_test_case", ToolClass::Write),
     ("save_work_inventory", ToolClass::Write),
+    ("report_to_developers", ToolClass::Write),
     ("run_flow", ToolClass::Run),
     ("stop_flow", ToolClass::Run),
     ("inspect_page", ToolClass::Run),

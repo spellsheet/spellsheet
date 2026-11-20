@@ -1471,6 +1471,55 @@
       "class": "write"
     },
     {
+      "name": "report_to_developers",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$defs": {
+          "ReportKind": {
+            "oneOf": [
+              {
+                "type": "string",
+                "const": "bug"
+              },
+              {
+                "type": "string",
+                "const": "missingNode"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/ReportKind"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "stepType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "body"
+        ]
+      },
+      "class": "write"
+    },
+    {
       "name": "request_secret",
       "annotations": {
         "readOnlyHint": false,

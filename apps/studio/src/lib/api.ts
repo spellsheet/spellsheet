@@ -176,6 +176,26 @@ export type SecretRequest = {
  * (ask_user_to_pick, `kind: "pick"`), or to finish something by hand such as
  * a login while its test_step waits (`kind: "human"`).
  */
+/** A report to SpellSheet's developers an AI drafted (MCP report_to_developers). */
+export type Report = {
+  id: string;
+  kind: "bug" | "missingNode";
+  title: string;
+  body: string;
+  /** The node type it is about. */
+  stepType?: string;
+  status: "draft" | "sent";
+  /** How many places Writer hid automatically (mail addresses, URLs...). */
+  hidden: number;
+  issueUrl?: string;
+  /** The developers already had the same report; this one was added to it. */
+  duplicate?: boolean;
+  createdAt: string;
+  sentAt?: string;
+};
+
+export type Reports = { reports: Report[]; canSend: boolean };
+
 export type PickRequest = {
   id: string;
   /** Written by the AI: shown as its words. */
@@ -370,6 +390,13 @@ export const api = {
   decideApproval: (id: string, approve: boolean) => call<ApprovalRequest>("decide_approval", { id, approve }),
   /** AI clients waiting for the person to point at something in the browser. */
   listPickRequests: () => call<PickRequest[]>("list_pick_requests"),
+  listReports: () => call<Reports>("list_reports"),
+  /** 送らない: the draft is removed and nothing is sent. */
+  discardReport: (id: string) => call<void>("discard_report", { id }),
+  /** 送る: the person's wording goes to the relay, which files a GitHub issue. */
+  sendReport: (id: string, title: string, body: string) => call<Report>("send_report", { id, title, body }),
+  /** The issue a sent report became, or GitHub's own form for a draft with this wording. */
+  openReport: (id: string, title?: string, body?: string) => call<void>("open_report", { id, title, body }),
   cancelPickRequest: (id: string) => call<void>("cancel_pick_request", { id }),
   finishPickRequest: (id: string) => call<void>("finish_pick_request", { id }),
   /** Writes the flow as a `.spx` file (default choices) to the Downloads folder; returns its path. */
@@ -623,4 +650,6 @@ export const events = {
   onApprovalsChanged: (handler: () => void): Promise<UnlistenFn> => listen("approvals-changed", () => handler()),
   /** An AI client asked the person to point at something, or stopped waiting. */
   onPickRequestsChanged: (handler: () => void): Promise<UnlistenFn> => listen("pick-requests-changed", () => handler()),
+  /** An AI client left a report for the developers, or one was sent or thrown away. */
+  onReportsChanged: (handler: () => void): Promise<UnlistenFn> => listen("reports-changed", () => handler()),
 };

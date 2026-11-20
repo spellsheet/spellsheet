@@ -8,6 +8,8 @@ import { ApprovalDialog } from "./components/ApprovalDialog";
 import { AskDialog } from "./components/AskDialog";
 import { unsavedAsk } from "./lib/ask";
 import { PickRequestCard } from "./components/PickRequestCard";
+import { ReportDialog } from "./components/ReportDialog";
+import { loadReports } from "./lib/reports";
 import { BottomPanel } from "./components/BottomPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { FlowSearch } from "./components/FlowSearch";
@@ -464,6 +466,7 @@ function Shell() {
       <ReceiveSheet />
       <OpenedFiles />
       <PickRequestCard />
+      <ReportDialog />
       <ContextMenu />
       <FileDragLayer />
     </>
@@ -617,6 +620,7 @@ export function App() {
       events.onSecretRequestsChanged(() => void store.getState().loadSecretRequests()),
       events.onApprovalsChanged(() => void store.getState().loadApprovals()),
       events.onPickRequestsChanged(() => void store.getState().loadPickRequests()),
+      events.onReportsChanged(() => void loadReports()),
       agent.onEvent((e) => agentStore.getState().onEvent(e)),
       agent.onLogin((e) => agentStore.getState().onLoginEvent(e)),
       agent.onInstall((e) => agentStore.getState().onInstallEvent(e)),
@@ -647,10 +651,12 @@ export function App() {
     // Requests come from another process (the MCP server): re-read on refocus too.
     void store.getState().loadApprovals();
     void store.getState().loadPickRequests();
+    void loadReports();
     const onFocus = () => {
       void store.getState().loadSecretRequests();
       void store.getState().loadApprovals();
       void store.getState().loadPickRequests();
+      void loadReports();
     };
     window.addEventListener("focus", onFocus);
     const onKey = (e: KeyboardEvent) => {

@@ -103,6 +103,12 @@ define_id!(
     "inv"
 );
 
+define_id!(
+    /// Identifier of a report to SpellSheet's developers (a bug or a missing node).
+    ReportId,
+    "rpt"
+);
+
 fn is_well_formed(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128

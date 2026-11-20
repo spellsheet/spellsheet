@@ -689,3 +689,18 @@ pub struct GetWorkInventoryParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportParams {
+    /// `bug` (SpellSheet does something wrong) or `missingNode` (a node the flow needs does not exist).
+    pub kind: spellsheet_core::ReportKind,
+    /// One line, e.g. 「Excel の表を並べ替えるノードがない」 or 「excel.readRows が結合セルの行を読み飛ばす」.
+    pub title: String,
+    /// What happened or what was missing, what you expected, what you did instead, and the step
+    /// types and error codes involved. General terms only: no business data, names, URLs or paths.
+    pub body: String,
+    /// The node type it is about, e.g. `excel.readRows`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_type: Option<String>,
+}

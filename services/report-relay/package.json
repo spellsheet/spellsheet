@@ -1,0 +1,10 @@
+{
+  "name": "spellsheet-report-relay",
+  "private": true,
+  "type": "module",
+  "description": "Relay that files reports from SpellSheet Writer as GitHub issues (Cloudflare Worker)",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "deploy": "npx wrangler@4 deploy"
+  }
+}
