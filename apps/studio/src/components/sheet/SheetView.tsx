@@ -1410,7 +1410,8 @@ export function SheetView({
   const setFollowRun = useStudio((s) => s.setFollowRun);
   const live =
     trail && isActive(trail) && follow && mode === "sheet" ? trail : null;
-  const at = followedStep(live);
+  // Paused, the page stays where the pause put it (a breakpoint is brought into sight on its own): a move still waiting is dropped.
+  const at = live?.status === "running" ? followedStep(live) : undefined;
   const moved = useRef(0);
   useEffect(() => {
     const el = desk.current;
