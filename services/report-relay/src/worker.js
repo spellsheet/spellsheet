@@ -7,7 +7,7 @@
 //
 // Because anyone can call this address, it only ever creates issues and
 // comments with fixed labels, limits how many reports one address and the
-// whole world may send, refuses big or malformed ones, adds a report that
+// whole world may send (counted atomically in a Durable Object), refuses big or malformed ones, adds a report that
 // matches a recent one to that issue instead of opening a new one, and
 // keeps @mentions and #references in the text from notifying anyone.
 //
@@ -15,7 +15,8 @@
 //   GITHUB_TOKEN  secret: fine-grained token, this repository only, Issues: read and write
 //   REPO          "spellsheet/spellsheet"
 //   SALT          secret, optional: mixed into the hashed address used for the limits
-//   REPORTS       KV namespace: counters and recent reports
+//   REPORTS       KV namespace: recent reports, to join one with the same title
+//   LIMITER       Durable Object (class Limiter): the counters for the limits
 
 /** One address may send this many reports per hour and per day; everyone together per day. */
 export const LIMITS = { perHour: 5, perDay: 20, allPerDay: 200 };
@@ -130,22 +131,47 @@ function sameKey(report) {
   return sha256(report.kind + "\n" + report.title.toLowerCase().replace(/\s+/g, ""));
 }
 
-/** Counts this report against the limits; the name of the limit it passes, if any. */
-async function overLimit(kv, who, now) {
-  const hour = Math.floor(now / 3600_000);
-  const day = Math.floor(now / 86400_000);
-  const counters = [
-    [`rate:${who}:h:${hour}`, LIMITS.perHour, 2 * 3600],
-    [`rate:${who}:d:${day}`, LIMITS.perDay, 2 * 86400],
-    [`rate:all:d:${day}`, LIMITS.allPerDay, 2 * 86400],
-  ];
-  const counts = await Promise.all(counters.map(([key]) => kv.get(key)));
-  const full = counters.findIndex(([, max], i) => Number(counts[i] ?? 0) >= max);
-  if (full >= 0) return ["perHour", "perDay", "allPerDay"][full];
-  await Promise.all(
-    counters.map(([key, , ttl], i) => kv.put(key, String(Number(counts[i] ?? 0) + 1), { expirationTtl: ttl })),
-  );
-  return null;
+/**
+ * The counters, counted in one place so two reports at the same moment
+ * cannot both read "4 of 5" and both pass. One Durable Object ("limits")
+ * handles one request at a time: its storage calls hold back the next
+ * request until this one has read and written its counts.
+ */
+export class Limiter {
+  constructor(state) {
+    this.storage = state.storage;
+  }
+
+  /** Counts a report from `who` at `now`; the name of the limit it passes, if any. */
+  async take(who, now) {
+    const hour = Math.floor(now / 3600_000);
+    const day = Math.floor(now / 86400_000);
+    const counters = [
+      [`${who}:h:${hour}`, LIMITS.perHour, (hour + 1) * 3600_000, "perHour"],
+      [`${who}:d:${day}`, LIMITS.perDay, (day + 1) * 86400_000, "perDay"],
+      [`all:d:${day}`, LIMITS.allPerDay, (day + 1) * 86400_000, "allPerDay"],
+    ];
+    const counts = (await this.storage.get("counts")) ?? {};
+    for (const [key, entry] of Object.entries(counts)) if (entry.until <= now) delete counts[key];
+    const full = counters.find(([key, max]) => (counts[key]?.n ?? 0) >= max);
+    if (!full) {
+      for (const [key, , until] of counters) counts[key] = { n: (counts[key]?.n ?? 0) + 1, until };
+    }
+    await this.storage.put("counts", counts);
+    return full ? full[3] : null;
+  }
+
+  async fetch(request) {
+    const { who, now } = await request.json();
+    return json(200, { over: await this.take(who, now) });
+  }
+}
+
+async function overLimit(env, who, now) {
+  const limiter = env.LIMITER.get(env.LIMITER.idFromName("limits"));
+  const res = await limiter.fetch("https://limiter/take", { method: "POST", body: JSON.stringify({ who, now }) });
+  if (!res.ok) throw new Error(`limiter: ${res.status}`);
+  return (await res.json()).over;
 }
 
 function github(env, fetcher) {
@@ -173,7 +199,7 @@ export async function handle(request, env, fetcher = fetch, now = Date.now()) {
   if (url.pathname === "/" && request.method === "GET") return json(200, { ok: true });
   if (url.pathname !== "/reports") return refuse(404, "NOT_FOUND", "no such page");
   if (request.method !== "POST") return refuse(405, "METHOD_NOT_ALLOWED", "send reports with POST");
-  if (!env.GITHUB_TOKEN || !env.REPORTS) return refuse(503, "NOT_CONFIGURED", "the relay is not set up");
+  if (!env.GITHUB_TOKEN || !env.REPORTS || !env.LIMITER) return refuse(503, "NOT_CONFIGURED", "the relay is not set up");
   if (!(request.headers.get("content-type") ?? "").startsWith("application/json")) {
     return refuse(415, "NOT_JSON", "send the report as JSON");
   }
@@ -189,7 +215,7 @@ export async function handle(request, env, fetcher = fetch, now = Date.now()) {
   if (!report) return refuse(400, "INVALID_REPORT", problem);
 
   const who = await sha256((env.SALT ?? "") + (request.headers.get("cf-connecting-ip") ?? "unknown"));
-  const limit = await overLimit(env.REPORTS, who, now);
+  const limit = await overLimit(env, who, now);
   if (limit) {
     return refuse(429, "TOO_MANY_REPORTS", limit === "allPerDay" ? "too many reports today; try tomorrow" : "too many reports from this PC; try later");
   }

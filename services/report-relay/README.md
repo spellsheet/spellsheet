@@ -57,6 +57,8 @@ Cloudflare のアカウント（無料のプランで足ります）と、`spell
    npx wrangler@4 deploy
    ```
 
+   回数を数える Durable Object（`Limiter`）は `wrangler.toml` の設定から自動で作られます。
+
    `https://spellsheet-report-relay.<アカウントのサブドメイン>.workers.dev` のような住所が出る。`curl https://…workers.dev/` で `{"ok":true}` が返れば動いています。
 5. GitHub のリポジトリの Settings → Secrets and variables → Actions → **Variables** に `SPELLSHEET_REPORT_URL` を作り、値を `https://…workers.dev/reports` にする。次のリリースから Writer に「送る」が出ます（それまでは「GitHub で書く」だけ）。
 

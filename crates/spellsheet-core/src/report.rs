@@ -320,8 +320,10 @@ fn not_found(id: &ReportId) -> CoreError {
 static HIDE: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
     let rules: [(&str, &str); 6] = [
         // SpellSheet's own pages stay: they point at the docs a report is about.
+        // Only URL characters: what follows a link without a space (`,a@b.jp`)
+        // still goes through the rules below.
         (
-            r"(?i)\bhttps?://(?:github\.com/spellsheet/|spellsheet\.github\.io/)\S*",
+            r"(?i)\bhttps?://(?:github\.com/spellsheet/|spellsheet\.github\.io/)[a-z0-9\-._~/%?#=&+]*",
             "$0",
         ),
         (r"(?i)\b(?:https?|ftp|file)://[^\s)>\]」』]+", "[URL]"),
@@ -359,8 +361,14 @@ pub fn redact(text: &str) -> (String, usize) {
     let mut hidden = 0;
     for (i, (re, with)) in HIDE.iter().enumerate() {
         if i == 0 {
+            let source = out.clone();
             out = re
-                .replace_all(&out, |c: &regex::Captures<'_>| {
+                .replace_all(&source, |c: &regex::Captures<'_>| {
+                    let whole = c.get(0).map_or(0..0, |m| m.range());
+                    // A link glued to an address (`…/a@b.jp`) is not kept whole.
+                    if source[whole.end..].starts_with('@') {
+                        return c[0].to_owned();
+                    }
                     kept.push(c[0].to_owned());
                     format!("\u{0}{}\u{0}", kept.len() - 1)
                 })
@@ -416,6 +424,18 @@ mod tests {
     fn keeps_spellsheet_links_step_types_and_numbers() {
         let input = "https://github.com/spellsheet/spellsheet/blob/main/docs/office.md の excel.readRows で 3 行目、2026-11-20、1,234 円、v0.1.34";
         assert_eq!(redact(input), (input.to_owned(), 0));
+    }
+
+    #[test]
+    fn text_right_after_a_kept_link_is_still_hidden() {
+        let (text, n) = redact(
+            "[docs](https://github.com/spellsheet/spellsheet),taro@example.com と https://spellsheet.github.io/a@b.jp",
+        );
+        assert_eq!(
+            text,
+            "[docs](https://github.com/spellsheet/spellsheet),[メールアドレス] と [URL]"
+        );
+        assert_eq!(n, 2);
     }
 
     #[test]

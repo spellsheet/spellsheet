@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LIMITS, handle, issueBody, neutralize, parseReport } from "../src/worker.js";
+import { LIMITS, Limiter, handle, issueBody, neutralize, parseReport } from "../src/worker.js";
 
 class Kv {
   map = new Map();
@@ -14,6 +14,33 @@ class Kv {
   }
 }
 
+/** A Durable Object as Cloudflare runs one: each storage call yields, and the next request waits until the one before it is done. */
+function limiterNamespace() {
+  const map = new Map();
+  const tick = () => new Promise((ok) => setTimeout(ok, 0));
+  const limiter = new Limiter({
+    storage: {
+      async get(key) {
+        await tick();
+        return map.has(key) ? structuredClone(map.get(key)) : undefined;
+      },
+      async put(key, value) {
+        await tick();
+        map.set(key, structuredClone(value));
+      },
+    },
+  });
+  let queue = Promise.resolve();
+  const stub = {
+    fetch: (url, init) => {
+      const done = queue.then(() => limiter.fetch(new Request(url, init)));
+      queue = done.catch(() => {});
+      return done;
+    },
+  };
+  return { idFromName: () => "limits", get: () => stub };
+}
+
 function setup() {
   const calls = [];
   let next = 1;
@@ -25,7 +52,7 @@ function setup() {
     }
     return new Response("{}", { status: 201 });
   };
-  const env = { GITHUB_TOKEN: "t", REPO: "spellsheet/spellsheet", REPORTS: new Kv() };
+  const env = { GITHUB_TOKEN: "t", REPO: "spellsheet/spellsheet", REPORTS: new Kv(), LIMITER: limiterNamespace() };
   return { calls, fetcher, env };
 }
 
@@ -87,6 +114,25 @@ test("one PC may send only a few reports an hour", async () => {
   assert.equal((await handle(post({ ...report, title: "別の PC" }, "198.51.100.7"), env, fetcher)).status, 201);
 });
 
+test("reports sent at the same moment cannot pass the limit together", async () => {
+  const { calls, fetcher, env } = setup();
+  const all = await Promise.all(
+    Array.from({ length: 25 }, (_, i) => handle(post({ ...report, title: `同時 ${i}` }), env, fetcher)),
+  );
+  const statuses = all.map((r) => r.status);
+  assert.equal(statuses.filter((s) => s === 201).length, LIMITS.perHour);
+  assert.equal(statuses.filter((s) => s === 429).length, 25 - LIMITS.perHour);
+  assert.equal(calls.length, LIMITS.perHour);
+});
+
+test("the counts start again in the next hour", async () => {
+  const { fetcher, env } = setup();
+  const now = Date.UTC(2026, 10, 20, 2, 0, 0);
+  for (let i = 0; i < LIMITS.perHour; i++) await handle(post({ ...report, title: `件 ${i}` }), env, fetcher, now);
+  assert.equal((await handle(post({ ...report, title: "まだ" }), env, fetcher, now)).status, 429);
+  assert.equal((await handle(post({ ...report, title: "次の時間" }), env, fetcher, now + 3600_000)).status, 201);
+});
+
 test("refuses what is not a report", async () => {
   const { calls, fetcher, env } = setup();
   const cases = [
@@ -109,9 +155,10 @@ test("refuses what is not a report", async () => {
 
 test("says so when it is not set up, and when GitHub fails", async () => {
   const { fetcher } = setup();
-  assert.equal((await handle(post(report), { REPORTS: new Kv() }, fetcher)).status, 503);
+  assert.equal((await handle(post(report), { REPORTS: new Kv(), LIMITER: limiterNamespace() }, fetcher)).status, 503);
+  assert.equal((await handle(post(report), { GITHUB_TOKEN: "t", REPORTS: new Kv() }, fetcher)).status, 503);
   const failing = async () => new Response("no", { status: 500 });
-  const res = await handle(post(report), { GITHUB_TOKEN: "t", REPORTS: new Kv() }, failing);
+  const res = await handle(post(report), { GITHUB_TOKEN: "t", REPORTS: new Kv(), LIMITER: limiterNamespace() }, failing);
   assert.equal(res.status, 502);
   assert.equal((await res.json()).error.code, "GITHUB_FAILED");
 });

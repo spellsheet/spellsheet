@@ -14,3 +14,13 @@ REPO = "spellsheet/spellsheet"
 [[kv_namespaces]]
 binding = "REPORTS"
 id = "REPLACE_WITH_THE_KV_NAMESPACE_ID"
+
+# The counters for the limits: one Durable Object counts every report, so
+# reports sent at the same moment cannot all pass (KV is not atomic).
+[[durable_objects.bindings]]
+name = "LIMITER"
+class_name = "Limiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Limiter"]
